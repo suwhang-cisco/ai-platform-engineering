@@ -1,134 +1,34 @@
-## 0.3.9 (2026-04-21)
+## 0.3.10 (2026-04-21)
 
-### Fix
+### BREAKING CHANGE
 
-- **helm**: single-node MCP ServiceAccounts and configurable name prefix (#1267)
-
-## 0.3.8-rc.6 (2026-04-19)
-
-### Fix
-
-- **supervisor**: stream curl tool responses to client (#1255)
-
-## 0.3.8-rc.5 (2026-04-18)
-
-### Fix
-
-- **security**: resolve CodeQL source code alerts and update GitHub Actions (#1252)
-
-## 0.3.8-rc.4 (2026-04-18)
-
-### Fix
-
-- **docker**: upgrade base images, binaries, and patch system CVEs (#1251)
-
-## 0.3.8-rc.3 (2026-04-18)
-
-### Fix
-
-- **deps**: bump pypdf, python-multipart, authlib, langsmith to fix CVEs
-
-## 0.3.8-rc.2 (2026-04-17)
-
-### Fix
-
-- **deps**: bump langchain-openai, langchain-core, langchain-text-splitters to fix CVEs (#1248)
-
-## 0.3.8-rc.1 (2026-04-17)
+- Model config field renamed from 'id' to 'model'
+- incident_engineer module is no longer available
+- Platform engineer agent now uses structured outputs
+exclusively. Legacy response formats are no longer supported.
+- Agents must now use UserInputMetaData JSON format instead of plain text when requesting user input
+- Update A2A protocol field naming from camelCase to snake_case
+- Replace artifactId with artifact_id throughout codebase
+- Replace messageId with message_id in streaming events
+- Replace taskId with task_id in context handling
+- Replace contextId with context_id across protocol
+- Replace lastChunk with last_chunk in streaming
+- Update TypeScript schema in Agent Forge frontend to match
+- none
+Closes: #324
+- helm chart version bumped to 0.2.3
+- test command now runs both general and RAG module tests
+- Redis service port name changed from 'http' to 'redis'
 
 ### Feat
 
+- **test**: mock dockerfiles yay
 - **helm**: Enable Vertical Pod Autoscaling across all charts (#1224)
-
-### Fix
-
-- **supervisor**: add curl tool for PUT/POST support and web fetching (#1242)
-- **Dockerfile**: Standardise non-root user configuration (#1246)
-
-## 0.3.7 (2026-04-17)
-
-### Feat
-
 - **helm**: allow easy single var override of appVersion for image tag
 - **helm**: allow custom ingress path for supervisor ingress
-
-### Fix
-
-- **slack-bot**: remove verbose per-event A2A debug logging
-- **slack**: include channel_id in streaming fallback log message
-- **slack**: disable streaming on channel_type_not_supported to avoid repeated failures
-- **slack**: restore v0.2.41 streaming UX and suppress duplicate sub-agent output
-- **slack**: include channel_id in streaming fallback log message
-- **slack**: disable streaming on channel_type_not_supported to avoid repeated failures
-- **slack**: restore v0.2.41 streaming UX and suppress duplicate sub-agent output
-- **slack-bot**: remove nonexistent keyword_search param from RAG prompts (SDPL-1601)
-- **helm**: do not neglect precious rag
-- **helm**: no dig man
-
-## 0.3.6 (2026-04-17)
-
-### Feat
-
 - **auth**: add dual auth middleware for shared key + OAuth2 coexistence (#1229)
-
-### Fix
-
-- **a2a**: isolate plan state per request to prevent cross-session leak (#1235)
-- **ui**: pin @testing-library/dom to exact version 10.4.1 (#1239)
-- **ui**: don't persist session-expired errors in chat history (#1236)
-- **supervisor**: add defaults to ResponseFormat required bool fields (#1237)
-
-## 0.3.5 (2026-04-17)
-
-### Fix
-
-- **checkpointer**: strip ephemeral skills state from MongoDB checkpoint writes (#1234)
-- **setup-caipe**: resolve unbound variable errors with set -u (#1232)
-
-## 0.3.4 (2026-04-16)
-
-### Fix
-
-- **middleware**: allow LLM to synthesize after RAG cap exhaustion (#1231)
-
-## 0.3.3 (2026-04-15)
-
-### Fix
-
-- **ci**: bump Go 1.25→1.26 and langgraph 1.0.10→1.1.6 (#1222)
-
-## 0.3.2 (2026-04-15)
-
-### Feat
-
 - **ui**: add skills gateway visual editor and /skills/gateway route (#1220)
-
-### Fix
-
-- **setup**: guard ConfigMap patches and enable ip_forward at runtime (#1221)
-- **ci**: add contents:write permission to notify-release jobs (#1219)
-
-## 0.3.1 (2026-04-15)
-
-### Feat
-
 - **rag**: add Jira issue ingestor and UI read-only datasource support (#988)
-
-### Fix
-
-- **slack-bot,supervisor**: streaming newlines, msg_too_long resilience, A2A skills injection (#1218)
-- **rag**: rename ExampleEntityMatch to ExampleStructuredEntityMatch in common models (#1200)
-- **streaming**: restore 0.2.41 streaming UX with marker gate fixes and middleware toggles (#1210)
-- **ui**: auth hardening + credentials_ref env var validation (#1211)
-
-### Refactor
-
-- **ui**: simplify skills gallery and remove unused types
-
-## 0.3.0 (2026-04-13)
-
-### Feat
-
 - **ui**: add /auth/reauth-complete page for new-tab OIDC re-auth flow
 - **ci**: add weekly security CVE tracking issue workflow (#1191)
 - **ui**: upgrade UI dependencies and components for v0.2.0 (#1171)
@@ -150,9 +50,614 @@
 - **security**: Grype Scan — rename, add container scanning for all 35 images, block on critical (#1126)
 - **db**: auto-migrate web feedback on app startup (#1109)
 - **admin**: enhanced platform statistics with Slack integration and unified filters (#1094)
+- add Grype container scan on version tag push (#1084)
+- **github**: deploy GitHub MCP server as separate HTTP pod (#1077)
+- create snyk-container.yml
+- **backstage-ingestor**: add BACKSTAGE_AUTH_MODE for multi-mode auth
+- **ui**: add data freshness visibility and cleanup controls
+- **rag**: add safe bulk cleanup with failed job protection
+- **rag**: update all ingestors to use get_fresh_until()
+- **rag**: add fresh_until calculation and reload_interval field
+- **supervisor**: add tool error resilience, workflow introspection, and form pre-population (#1062)
+- **rag**: improve MCP search tools and UI
+- **aws**: add AWS CLI and kubectl tools to single-node AWS subagent
+- **helm**: propagate global.checkpointPersistence to all agent subcharts (#1023)
+- **skills**: skills middleware integration with gateway API (#1024)
+- **dynamic-agents**: add LOG_LEVEL env var and reduce log verbosity
+- **dynamic-agents**: add backend cancellation for stop button
+- **dynamic-agents**: add progressive turn loading and chat download
+- **dynamic-agents**: add timeline UI for streaming agent responses
+- **dynamic-agents**: add namespace correlation for subagent SSE events
+- **ui**: redesign inline event cards with interleaved rendering
+- **ui**: show tool/subagent calls inline in chat panel
+- **slack**: replace custom MCP with korotovsky/slack-mcp-server v1.2.3 (#1036)
+- **victorops**: multi-org support via VICTOROPS_ORGS env var
+- **argocd**: add directory_recurse parameter to create_application
+- **checkpointer**: per-agent MongoDB checkpoint isolation with auto-prefix (#1017)
+- **dynamic-agents**: add file deletion from context panel
+- **dynamic-agents**: add loading state and simplify file tree
+- **dynamic-agents**: add files tree to context panel
+- **helm**: change default imagePullPolicy from Always to IfNotPresent since we do not do stable/latest tags anymore
+- **subagents**: centralise MCP mode variabled into utils
+- **helm**: add mcp deployments in parent chart for single-node HTTP case
+- **helm**: subagent level llm secrets will be moved to use agentSecrets instead
+- **ci**: branch with *-single-node-* will not prebuild subagent images
+- **helm**: add support for subagent level mcp variables and add user_input subagent prompt file mount
+- rename "caipe" subagent to "user_input" subagent
+- allow sub-agent level MCP mode + addr
+- **ui**: make built-in skills configurable and non-deletable (#1014)
+- **confluence**: add configurable title-based page filtering for ingestion (#996)
+- **dynamic-agents**: add per-agent gradient theme support
+- **dynamic-agents**: add export YAML and clone agent actions
+- **ui**: allow addMessage to preserve message IDs from checkpointer
+- **ui**: load Dynamic Agent chat history on conversation open
+- **dynamic-agents**: add conversations router with messages and clear endpoints
+- **dynamic-agents**: switch to MongoDB checkpointer for persistent chat history
+- **dynamic-agents**: add langgraph-checkpoint-mongodb dependency
+- **dynamic-agents**: add admin Conversations tab for managing chat history
+- **ui**: implement DynamicAgentChatPanel for phase 1 of persistent chat history
+- **ui,slack-bot**: add structured timeline and plan-mode streaming (#985)
+- **docs**: implement helm chart documentation generator (#1003)
+- **aws-agent**: block kubectl get/describe secrets and sanitize output (#977)
+- **persistence**: add Redis, Postgres, and MongoDB checkpoint and store persistence (#909)
+- **docker**: add build context and volume mounts for RAG dev services (#986)
+- **dynamic-agents**: add HITL forms using HumanInTheLoopMiddleware pattern
+- **ui**: add VictorOps icon to integration orbit (#972)
+- **dynamic-agents**: add conversation ID display and improve logging
+- **dynamic-agents**: add builtin tools and API restructuring
+- **dynamic-agents**: add llmSecret support for LLM credentials
+- **dynamic-agents**: add seedConfig support for MCP servers and agents
+- properly support all llm providers
+- **single-node**: allow sub-agent level llm key
+- **helm**: add dynamic-agents feature flags to caipe-ui config
+- **helm**: add dynamic-agents subchart
+- **dynamic-agents**: add CI/CD infrastructure
+- **dynamic-agents**: add config-driven seed agents and MCP servers
+- **dynamic-agents**: persist MCP warnings across chat messages
+- **dynamic-agents**: add resilient MCP connections, restart runtime, and session logging
+- **dynamic-agents**: add team sharing UI for visibility selection
+- **custom-agents**: warn users when MCP tools are unavailable
+- **custom-agents**: UX makeover with step wizard and improved tools UI
+- **dynamic-agents**: fix model/provider sync and enhance UI
+- **dynamic-agents**: add model selection with provider support
+- **dynamic-agents**: add fetch_url built-in tool with domain ACL
+- **dynamic-agents**: add subagent delegation support
+- **dynamic-agents**: add Langfuse tracing support
+- **ui**: separate chat views for Platform Engineer and Dynamic Agents
+- **ui**: improve Dynamic Agents chat UX with agent selection
+- **ui**: add Dynamic Agents admin UI and chat integration
+- **dynamic-agents**: add FastAPI backend service for dynamic agent builder
+- **slack-bot**: add podAnnotations support to helm chart (#943)
+- **slack-bot**: add podAnnotations support to helm chart (#943)
+- improve manual release by splitting steps for easier retry
+- **policy**: add two-tier policy system with dynamic tool discovery
+- **ui**: add Task Builder card to home page platform capabilities
+- sub-agent to use context summarisation + refine search req
+- **rag**: replace single graph_tools_enabled toggle with individual per-tool flags
+- use Github app to bypass branch protection rule during release
+- **task-builder**: scope custom workflows per-user
+- **supervisor**: inject self-service workflows into prompt via middleware
+- **agent-github**: connect to GitHub Copilot MCP API in multi-node mode (#907)
+- **aigateway**: add Vault integration and single-node agent configuration (#898)
+- **ui**: add admin audit logs with export and owner search (#894)
+- **ui**: add dashboard-style home page with shared conversations and insights (#896)
+- **ui**: admin - add feedback visibility, NPS campaigns, and admin audit mode (#893)
+- **ui**: add share with everyone for conversations (#891)
+- **ui**: live status, input-required, and unviewed message indicators (#892)
+- **task-builder**: add live workflow discovery and MongoDB integration for single-node dev
+- **task-builder**: add UX enhancements to visual workflow editor
+- **task-builder**: add visual Task Builder with MongoDB persistence
+- **ui**: add preferences modal with categorized feature flags (#865)
+- add custom mention prompts (#888)
+- **rag**: add configurable MCP server for RAG (#875)
+- **ui**: add multiselect toggle and comma-separated values to metadata form (#880)
+- **memory**: add cross-thread store and automatic fact extraction (#861)
+- **caipe-ui**: add existingSecret support for pre-existing secrets (#862)
+- **slack-bot**: add X-Client-Source header and parent Helm chart wiring
+- **slack-bot**: upstream Slack bot integration into CAIPE platform
+- add agent-weather and agent-petstore to helm chart (#869)
+- **aigateway**: deterministic Webex message and Helm task config
+- make skill-templates independent of caipe-ui.enabled (#836)
+- **victorops**: Add Agent victorops aka Splunk On-call (#858)
+- **agent**: add network utility agent and MCP server (#855)
+- **rag-server**: add MCPAuthMiddleware to enforce auth on /mcp routes
+- handle existing LLM keys, persist form on refresh, show selections
+- **ui**: add interactive changelog viewer to System Settings dialog (#851)
+- Support comma-separated OAUTH2_CLIENT_IDS for cid validation (#849)
+- **rag**: add batch job status endpoint for efficient datasource polling (#845)
+- **ui**: add response field to CAIPEAgentResponse for form chat text
+- **tools**: add terraform_fmt tool and fix filesystem state consistency
+- set USE_STRUCTURED_RESPONSE true by default (#840)
+- **single-node**: add structured response support and ResponseFormat tool notifications
+- **ui**: replace previewMode with configurable envBadge (#834)
+- **ui**: make admin dashboard read-only for non-admin authenticated users (#833)
+- **ui**: env-configurable personalization defaults, new themes, and unified settings menu (#832)
+- **ui**: refactor Create Workflow into Skills Builder Editor with skills in helm chart (#829)
+- **ui**: auto-enable follow_external_links when sitemap mode is selected
+- **ui**: show follow_external_links option for sitemap crawl mode
+- **webloader**: show sitemap URL in job success message
+- **chart**: add agent-weather dependency and remoteAgent bypass for single-node
+- **ui**: add support to UI's admin page for prometheus metrics dashboard (#826)
+- **ui**: add WORKFLOW_RUNNER_ENABLED feature flag (#823)
+- **github-mcp**: add invite_user_to_org tool and parameterize task config
+- **ui**: add reload interval UI and help popup for RAG ingest
+- **rag**: add per-datasource reload interval for webloader
+- **ui**: support comma-separated OIDC_GROUP_CLAIM values
+- **ui**: remove X-Identity-Token header from RAG proxy
+- **rag**: implement tiered groups resolution with Redis caching
+- **rag**: add userinfo endpoint support for fetching user groups
+- **single-node**: add user email context, fix recursion limit, and fix webex mcp
+- **rag-ui**: add 'Restrict to this page' button for SPA tab scraping
+- Return trace_id to clients for Langfuse feedback (#805)
+- **ui**: track message sender identity for shared conversations
+- **ui**: show user first name instead of 'You' in chat messages
+- introduce new was_task_successful and depricate request_user_input if USE_STRUCTURED_RESPONSE is true
+- add support for USE_STRUCTURED_RESPONSE where LLM uses structured response tool call as its final output
+- **a2a**: add source agent tracking for sub-agent message grouping
+- agent resilience, registry exclusions, and infra improvements
+- **rag-stack**: add PodDisruptionBudgets for Milvus components
+- add agentgateway helm chart under ai-platform-engineering
+- introduce new was_task_successful and depricate request_user_input if USE_STRUCTURED_RESPONSE is true
+- add support for USE_STRUCTURED_RESPONSE where LLM uses structured response tool call as its final output
+- **ui**: add configurable favicon via NEXT_PUBLIC_FAVICON_URL
+- **ui**: rename Agentic Workflows to Skills and add icon customization
+- **rag**: add slim ingestors variant and consolidate CI matrix
+- **github**: add private key path passthrough and clean up env example
+- **github**: add token sanitization to prevent credential leakage
+- **github**: add GitHub App token auto-refresh for MCP authentication
+- **ui**: add user insights page, enhanced admin dashboard, and chat performance improvements
+- **ui**: add crash recovery with interrupted message detection and task polling
+- **ui**: add copy-to-clipboard for access token and ID token in user menu
+- **ui**: add conversation archive with soft-delete, restore, and auto-purge
+- **ui**: add silent token refresh and dismiss persistence for expiry guard
+- **ui**: persist chat messages and A2A events to MongoDB for cross-device sync
+- **ui**: sync UI personalization to MongoDB for cross-device persistence
+- **ui**: implement team management — view details, manage members, delete teams
+- **ui**: add branding env vars to docker-compose and helm values
+- **ui**: replace NEXT_PUBLIC_ with runtime config via /api/config
+- **rag-server**: reduce Docker image size by making HuggingFace optional
+- **helm**: simplify rag-server config to use generic env map
+- **embeddings**: add LiteLLM proxy support for embeddings
+- **auth**: add X-Identity-Token header support for ID token claims extraction
+- **ingestors**: add status messages for JavaScript rendering mode
+- **build**: add Playwright/Chromium support to ingestors image
+- **ingestors**: add backwards compatibility for deprecated settings fields
+- **ui**: display document and chunk metrics in ingest view
+- **server**: add chunk count tracking and cleanup utility
+- **ingestors**: integrate Scrapy loader into web ingestor
+- **common**: add ScrapySettings model and job metrics tracking
+- **ingestors**: add Scrapy-based web loader infrastructure
+- **a2a**: emit per-task tool notifications for deterministic workflows
+- simplify deployment to single-node deep agent architecture
+- **ui,rag**: add RAG disable feature and trusted network config
+- **ui**: add version display in System Status popover
+- **gitlab**: add MCP server config and comprehensive documentation
+- **rag**: add JWT authentication and RBAC documentation
+- **ci**: enhance CAIPE UI test coverage reporting in PRs
+- **ci**: add CAIPE UI test automation and fix test mocks
+- **ui**: add mongodbEnabled to config system
+- **docker**: add CAIPE UI service with MongoDB integration
+- **docker**: add CAIPE UI with MongoDB profiles and enable flag
+- **ui**: compress streaming events in A2A timeline views
+- **ui**: redesign A2A timeline with trace view and fix workflow history thumbnail
+- **ui**: move workflow history to right panel and improve UX
+- **ui**: add A2A timeline view and fix workflow thumbnail markdown rendering
+- **charts**: integrate MongoDB and update CAIPE UI configuration
+- **charts**: add ingress redirect template for domain migration
+- **charts**: add MongoDB Helm subchart for CAIPE UI persistence
+- **ui**: add dedicated workflow history page
+- **ui**: back button now opens workflow history panel
+- **ui**: add CAIPE spinner overlay while saving workflow
+- **ui**: migrate favorites from localStorage to MongoDB
+- **ui**: add structured user input form rendering
+- **backend**: add UserInputMetaData artifact support for request_user_input
+- **ui**: improve OIDC info dialog and fix auth initialization
+- **ui**: add AuthGuard to all knowledge-bases and admin pages
+- **ui**: disable admin tab when MongoDB is not configured
+- **ui**: restore three-panel chat layout with MongoDB persistence
+- **agentic-workflows**: enhance execution output with fullscreen and copy features
+- add favorites and edit functionality to quick-start templates
+- move 'Run in Chat' to quick-start dialog
+- add 'Run in Chat' button to agent builder
+- **sidebar**: implement hover-based visibility for share and delete buttons
+- **sidebar**: add resizable width, truncation indicator, and dynamic text expansion
+- add agent builder UI and MongoDB chat history improvements
+- **ui**: add admin dashboard, teams management, and various UI improvements
+- **ui**: make agents selection optional in Use Case Builder
+- **ui**: implement share button and dialog for conversations
+- **ui**: integrate MongoDB persistence with chat UI
+- **ui**: implement complete MongoDB persistence with Next.js API routes
+- **dev**: add mongo-express web UI for MongoDB management
+- **backend**: integrate chat API routes with FastAPI server
+- **ui**: complete Phase 3 - share dialog and status UI
+- **ui**: implement Phase 3 core - UUID routing and MongoDB integration
+- **backend**: implement Phase 2 - audit logging and notifications
+- **backend**: implement MongoDB chat history backend (Phase 1)
+- **dev**: add MongoDB service to docker-compose.dev.yaml
+- **rag**: ui improvements for rbac, configs and readme
+- **rag**: auth rework for user and ingestor
+- **ui**: unified connection status popup
+- **ingestor**: add OAuth2 client credentials authentication support
+- **auth**: implement JWT validation for RAG server with multi-provider support
+- **ui**: add rag rbac to knowledge-bases tab
+- **ui**: add ingestor type availability logic; fix icons
+- **ui**: add back ingestors section
+- **task-config**: update self service tasks
+- **streaming**: enable subagent token streaming
+- **task-config**: initial task config implementation
+- **ui**: add manual refresh token button to test token validity
+- **ui**: display refresh token metadata in OIDC token dialog
+- **ui**: add user context tracking to backend messages
+- **ui**: add Popover component
+- **ui**: display integration tags in connection status
+- **ui**: enhance user menu and connection status
+- **ui**: add horizontal scroll to markdown tables
+- **ui**: add advanced theme settings with gradient controls
+- **ui**: move Tech section to user menu as 'About'
+- **ui**: apply gradient themes across all pages, icons, and widgets
+- **ui**: add gradient theme selector with 5 theme options
+- **ui**: implement @mention autocomplete for agent selection
+- **ui**: move stop button to text input area
+- **ui**: enhance textbox focus state with stronger visual feedback
+- **ui**: replace textarea with auto-growing textarea component
+- **ui**: add ui path routing
+- **tests**: add Make targets for CAIPE UI tests
+- **ui**: make OIDC refresh token support optional and gracefully degrade
+- **ui**: implement OIDC refresh token support for seamless authentication
+- **docs**: add CAIPE UI section to sidebar navigation
+- **makefile**: add documentation site targets
+- **ui**: enhance A2A debug panel with execution plan and full event streaming
+- **ui**: implement runtime configuration and enhance SSO user menu
+- **helm**: add external secrets and configmap support for caipe-ui
+- **usecases**: add edit functionality and fix placeholder detection
+- **ui**: migrate to @a2a-js/sdk and improve streaming UX
+- **ui**: add retry button to regenerate responses
+- **a2a**: improve streaming reliability and UI performance
+- **helm**: add caipe-ui subchart with ingress support
+- **ui**: add RAG integration, layout settings, and dark mode improvements
+- **helm**: add caipe-ui subchart with ingress support
+- **ui**: add download button for A2A events in debug panel
+- **ui**: persist tool notifications with collapsible history
+- add Docker build targets and fix nginx.conf
+- **ci**: add CAIPE UI Docker build workflow and reorganize Dockerfile
+- add caipe-ui make targets for running the UI
+- **ui**: add visual feedback to JSON copy button in A2A debug
+- **ui**: add Linux logo and fix favicon
+- **ui**: update IntegrationOrbit with official full-color logos
+- **ui**: add GitHub PR Review use case with input form
+- **ui**: use full-color original SVG logos in task list
+- **ui**: add official agent logos to task list and agent selector
+- **ui**: implement agent-forge features - feedback, copy, tasks, agent selection
+- **ui**: persist A2A events, tasks, and output to localStorage
+- **ui**: implement per-conversation streaming state
+- **ui**: add Tasks tab to ContextPanel for execution plan display
+- **ui**: expand streaming output by default during streaming
+- **ui**: full-width two-panel layout for login and logout
+- **ui**: add integration orbit animation to logout page
+- **ui**: update integration logos with accurate SVG icons
+- **ui**: disable panel resizing on Use Cases tab
+- **ui**: add resizable panels for sidebar, chat, and context
+- **ui**: show descriptive tool notifications with wrench emoji
+- **ui**: show connected URL in status indicator
+- **ui**: persist chat history to localStorage
+- **ui**: add branded loading screen component
+- **ui**: add logout page and improve auth flow
+- **ui**: add font options and settings panel
+- **ui**: make OIDC group claim configurable
+- **ui**: add OIDC SSO with group-based authorization
+- add caipe-ui using a2ui, copilotkit
+- **spec-kit**: add Cursor rules for CAIPE development
+- initialize Spec Kit at repository root
+- add authn to rag-stack chart
+- add role/userinfo to ui, fix ingestor type not availalbe
+- add RBAC to rag server endpoints
+- **supervisor**: add [FINAL ANSWER] marker to filter thinking messages
+- **tools**: consolidate utility tools into utils/agent_tools
+- **tools**: add git auth support and beads-github sync
+- **platform-engineer**: integrate new utility tools into deep agent
+- **tools**: add utility tools for git, grep, wget, curl, glob, and memory
+- **aws**: add tracing configuration and disable A2A framework tracing
+- **rag**: Refactor Confluence ingestor to use json-based configuration
+- **gitlab**: add GitLab agent configuration and minimal prompt config
+- **gitlab**: add GitLab agent
+- **beads**: add A2A Streaming Improvements epic and tasks
+- add beads (bd) issue tracking system
+- use new helm chart GHCR oci://ghcr.io/cnoe-io/charts/* so it does not collide with legacy charts
+- new release pipeline to automate helm version and image tagging
+- **confluence-rag**: Implement confluence rag ingestor v2
+- **helm**: make rag prompt configurable
+- add langfuse to agent ontology
+- **prompts**: make analyze_query mandatory for all queries
+- **agents**: add SOPs, table formatting, and context scoping to Confluence, PagerDuty, AWS
+- **splunk**: add Splunk Cloud Platform MCP log search integration
+- **langmem**: add proactive pre-flight context check to supervisor
+- **langmem**: add centralized LangMem utility with observability
+- **multi-agents**: add langmem dependency for supervisor
+- **agents**: implement comprehensive context management and error recovery
+- **agents**: add intelligent tool output truncation for context management
+- **github-agent**: add gh CLI tool for workflow log retrieval and debugging
+- **prompts**: add GitHub Actions log retrieval from URLs
+- **agents**: add MCP tool error handling to prevent A2A stream closure
+- **prompts**: add GitHub agent formatting SOP and context awareness
+- webui ingest view now supports pagination
+- **docs**: add development guide
+- add github ingestor
+- move confluence to use official mcp image by default in helm
+- **build**: add test-agent-argocd target for agent unit tests
+- **confluence**: apply sooperset/mcp-atlassian to production docker-compose
+- **confluence**: replace custom MCP server with sooperset/mcp-atlassian
+- **aws**: improve ECR URL parsing and repository search
+- **supervisor**: add AWS agent for Kubernetes debugging
+- **jira**: enhance MCP error handling and epic linking workflow
+- auto-inject current date into ALL agent queries globally
+- **aws**: auto-inject current date into every query
+- **aws**: add smart date usage - only fetch dates when actually needed
+- **aws**: add smart namespace auto-discovery for kubectl operations
+- **aws**: add kubectl logs support and documentation
+- **aws**: add Phase 7 - Kubernetes pods status to EKS health check SOP
+- **aws**: add EKS kubectl tool with temporary kubeconfig management
+- **aws**: add comprehensive EKS cluster health check SOP
+- **aws**: broaden planning workflow triggers beyond 'all' queries
+- **aws**: implement planning mode with reflection sub-agent
+- upgrade langchain to 1.x for deepagents compatibility
+- **aws**: integrate deepagents for context management and auto-offloading
+- **aws**: prompt agent to ask for account when not specified
+- **docker**: add AWS CLI, kubectl, jq and multi-account configuration
+- **supervisor**: update AWS agent routing to support all services and cost queries
+- **aws**: enhance AWS agent system prompt for multi-account and cost queries
+- **aws**: add AWS CLI tool with cross-account support and reflection capabilities
+- add reflection and autonomous retry to supervisor and jira agents
+- **jira**: add explicit update verification and confirmation workflow
+- **jira**: add intelligent field handling and fallback for custom fields
+- **jira**: add filter management tools and board creation workflow
+- **jira**: add comprehensive MCP tools and enhanced security
+- **docker**: add section headers and slim transport configuration
+- **docker**: refactor docker-compose.dev.yaml for better configurability
+- **agent-forge**: improve build workflow and add local build tooling
+- **supervisor**: add ambiguous terms clarification for multi-agent queries
+- **jira**: add reflection and auto-retry strategy for failed searches
+- **jira**: add get_epic_issues tool and improve agent reliability
+- **jira**: add read-only mode, mock responses, and improve error propagation
+- **jira**: implement dynamic field discovery and schema validation
+- add grafana dashboard to helm chart
+- add grafana-dashboard
+- rag intertation with supervisor
+- also update docker-compose files in main dir to volume mount
+- just some more logging
+- bump charts
+- make all sub-agent prompts configurable
+- also enable metric from each sub-agent
+- default metric to false and use global with helper
+- add prometheus metrics support
+- **argocd**: add Link column to ArgoCD application tables
+- enhance agent prompts and capabilities
+- **argocd**: implement two-tier search with automatic exhaustive fallback
+- update agents and configuration files
+- bump chart
+- **template**: add PetStore MCP server implementation
+- **prompts**: add error handling and security guardrails
+- bump chart
+- much shorter system prompt for deep supervisor agent
+- cahrt bump for prompt config
+- ontology agent rewrite for scale
+- add webex and argocdv3 ingestors, fix dummy ingestor
+- add embeddings factory; separate webloader
+- **tools**: add workspace operations and utility tools
+- **mcp**: add standardized entry points for MCP servers
+- **structured-outputs**: implement structured output support for agents
+- **platform-engineer**: implement structured outputs and workspace tools
+- enhance user input transformation with detailed recipe
+- add user input metadata format and improve agent orchestration
+- add UserInputMetaData format and automatic error retry logic
+- enhance agent system with parallel execution and improved UX
+- parallelize MCP client initialization with graceful failure handling
+- add MCP initialization retry logic with configurable timeouts
+- add grep_virtual_file tool for efficient large output search
+- add critical directive to preserve sub-agent output details
+- add GitHub CI/CD failure analysis directive to system prompt
+- enhance multi-agent queries with unified tabulated results
+- add our github repo link easy for mobile
+- maintain same defaults and properly bump charts
+- add redis persistence, external secrets v1 support, and fix dependencies
+- add info on PR template
+- allow helm pre-release on fork PRs using label
+- Use more standard pattern for Helm ingress
+- build agent-forge on push to main and remove cronjob
+- Support multi-platform Docker builds (AMD64 + ARM64)
+- Update agent-forge Dockerfile for AMD64 compatibility
+- refactor a2a stream with common code and fix agent-forge workflow
+- add prompt templates and agent integration improvements
+- Add execution plan markers and creation confirmation policy
+- Major streaming architecture improvements and prompt enhancements
+- update a2a streaming and agent improvements
+- implement A2A streaming and common code refactoring
+- refactor a2a_stream with common code
+- major ingestor refactor
+- add retry when 429 Too many requests
+- add istio support and extraDeploy for custom resources
+- **helm**: Add flexible prompt configuration with default and deep agent modes
+- up to date helm and external secrets doc
+- **helm**: add promptConfig override support
+- adding job termination, reload and search weights
+- add mcp server for RAG
+- add Claude Agent SDK template with A2A and MCP protocol bindings
+- add dev version of complete
+- allow supervisor agent to work with any remote agent
+- add condition to rag-stack and fix webui;
+- new rag-stack chart
+- add agent_skill_examples in prompt_config
+- add ENABLE_<agent> to supervisor cm
+- use skills example config
+- agent-rag can now filter
+- dynamic docker-compose generation with persona-based profiles
+- add dynamic docker-compose generator and persona configuration
+- add agent-aws-slim and agent-petstore-slim services
+- **agents**: enhance jira agent and add argocd tests
+- **agents**: enhance jira agent and add argocd tests
+- add connectors
+- add common utils
+- unified rag server
+- migrate ontology and rag agent
+- **deepagents**: add deepagents package locally
+- **backstage**: add TechDocs tools for improved documentation access
+- disable graphrag in helm chart until fixed
+- add tags to helm dependencies
+- current experiment-dev-use2-1 values
+- **auth**: update A2A authentication configuration
+- add additional authentication options for A2A protocol
+- add missing agent deployments for aws, splunk, webex, komodor
+- upgrade Jira agent to API v3
+- idpbuilder values
+- add OAuth2 authentication support for A2A protocol
+- add integration test workflows and improve agent Docker build automation
+- updating collection name from rag-default to rag-united
+- backend data management improvements for milvus and redis
+- adding addtional config in web UI frontend
+- add prebuild docker image github actions
+- Only build images if relevant change
+- Adding streamable http to Webex agent
+- Adding initial, optional Webex agent
+- Adding streamable http to Webex agent
+- Adding initial, optional Webex agent
+- use routing evaluator and tool match evalutor and use the expected ouptut in the dataset
+- implement new llm-trajectory match evaluator
+- redesign the trajectory and tool call match evaluator
+- **trace**: redesign trace processing method to get the tool call
+- **evals**: refactor evaluator architecture and switch to OpenAI
+- **evals**: add unified trajectory evaluator with graceful LLM fallback
+- **evals**: link dataset traces with platform engineer execution
+- **evals**: add auto-detection for Langfuse host in upload script
+- add expected_output support and separate upload functionality
+- add eval service
+- major helm chart refactor
+- implement memory-optimized batch processing for URL loading
+- update agents documentation and sidebar
+- enhance coverage reporting with detailed metrics and tables
+- **tests**: add comprehensive test suite with memory monitoring and scale tests
+- add AWS agent to include cost explorer MCP (#251)
+- add kb-rag-web to helm chart
+- add the aws agent to platform engineer (#246)
+- Addition of Agent Splunk (#247)
+- use a2a card to dynamically create client
+- added redis db management backend
+- added reranking
+- frontend now supports RAG config
+- add multiple llm provider support for graphrag
+- **argocd**: add argocd sanity tests for local argocd kind instance (#224)
+- **workshop**: add workshop 7 docker-compose
+- add http mcp remote support for petstore and weather agents
+- implement job tracking and ingestion progress for URL processing
+- initialize frontend for KB RAG with React, Vite, and Tailwind CSS
+- create dev mission docker file
+- add petstore to docker-compose.weather
+- add multi-agent dynamic connectivity and petstore refactor
+- add weather agent with stdio mcp server
+- adding rag-ingestion pipeline
+- **brand**: update docs to CAIPE branding (#211)
+- add eval prompts (#191)
+- **docker**: use multi-stage builds to reduce container size (#198)
+- add a new graphrag helm chart
+- fix Langfuse trace ID propagation in multi-agent system (#195)
+- **helm**: add useRemoteMcpServer to use remote MCP server (#193)
+- add mcp http support to helm chart (#190)
+- add slim to helm chart (#187)
+- use agntcy-app-sdk to integrate with agntcy slim (#171)
+- **graph-rag**: add evaluation and tests
+- embed vidcast in idpbuilder doc
+- add a new pre-release helm chart github action
+- output URL to help user.
+- updated kb-rag from agent-rag
+- implement distributed tracing across all agents (#139)
+- add idpbuilder docs (#142)
+- allow external url as the A2A url (#122)
+- intial commit incident engineer (#111)
+- **graph_rag**: create nexigraph graph rag system (#97)
+- **rag**: doc load, embed, vector store, retrieve (#96)
+- updates
+- updates
+- remove dependency.yml
+- updates
+- update OSS artifacts and github actions
+- add some colours to the docs code block
+- add doc for eks deployment
+- **helm**: add command and args to deployment
+- **helm**: publish chart
+- add CORS and use LLMFactory
+- use cnoe_agent_utlis
+- publish helm
+- added ci pipeline
+- added ci pipeline
+- added A2A server and re-formatted
+- add A2A integration and new MCP server (#5)
+- Use cnoe utlis to get rid of llm_factory to encompass latest LLMs
+- added google's A2A server and client side
+- short term memory to the agent
+- add helm publish
+- add CORS and fix lint errors
+- use cnoe_agent_utlis instead of llm_factory
+- add agent forge
+- **agent-komodor**: add komodor agent
+- add script to automate Helm configuration for new agents
+- **docs**: add docs website
+- implement dual-mode docker-compose and update the readme and example env
+- **tracing**: use env to enable tracing
+- monkey patch a2a noise
+- implement langfuse v3
+- publish helm
+- added ci pipeline
+- added ci pipeline
+- added A2A server and re-formatted
+- add A2A integration and new MCP server (#5)
+- adding confluence agent
+- publish helm
+- added ci pipeline
+- added ci pipeline
+- added A2A server and re-formatted
+- add A2A integration and new MCP server (#5)
+- add agent-a2a-docker-build.yml
+- add mcp server support (#45)
+- **helm**: Implement helm chart (#42)
+- propogate context_id from user client LangGraph thread_id (#34)
+- **Dockerfile**: add multi-arch support
+- **cors**: add CORS and update ACP/A2A graph entry point (#11)
+- add A2A integration and new MCP server (#5)
+- adding 6th agent backstage
+- allow custom prompts via YAML config and restore original agent/platform prompt defaults
 
 ### Fix
 
+- **helm**: single-node MCP ServiceAccounts and configurable name prefix (#1267)
+- **supervisor**: stream curl tool responses to client (#1255)
+- **security**: resolve CodeQL source code alerts and update GitHub Actions (#1252)
+- **docker**: upgrade base images, binaries, and patch system CVEs (#1251)
+- **deps**: bump pypdf, python-multipart, authlib, langsmith to fix CVEs
+- **deps**: bump langchain-openai, langchain-core, langchain-text-splitters to fix CVEs (#1248)
+- **supervisor**: add curl tool for PUT/POST support and web fetching (#1242)
+- **Dockerfile**: Standardise non-root user configuration (#1246)
+- **slack-bot**: remove verbose per-event A2A debug logging
+- **slack**: include channel_id in streaming fallback log message
+- **slack**: disable streaming on channel_type_not_supported to avoid repeated failures
+- **slack**: restore v0.2.41 streaming UX and suppress duplicate sub-agent output
+- **slack**: include channel_id in streaming fallback log message
+- **slack**: disable streaming on channel_type_not_supported to avoid repeated failures
+- **slack**: restore v0.2.41 streaming UX and suppress duplicate sub-agent output
+- **slack-bot**: remove nonexistent keyword_search param from RAG prompts (SDPL-1601)
+- **helm**: do not neglect precious rag
+- **helm**: no dig man
+- **a2a**: isolate plan state per request to prevent cross-session leak (#1235)
+- **ui**: pin @testing-library/dom to exact version 10.4.1 (#1239)
+- **ui**: don't persist session-expired errors in chat history (#1236)
+- **supervisor**: add defaults to ResponseFormat required bool fields (#1237)
+- **checkpointer**: strip ephemeral skills state from MongoDB checkpoint writes (#1234)
+- **setup-caipe**: resolve unbound variable errors with set -u (#1232)
+- **middleware**: allow LLM to synthesize after RAG cap exhaustion (#1231)
+- **ci**: bump Go 1.25→1.26 and langgraph 1.0.10→1.1.6 (#1222)
+- **setup**: guard ConfigMap patches and enable ip_forward at runtime (#1221)
+- **ci**: add contents:write permission to notify-release jobs (#1219)
+- **slack-bot,supervisor**: streaming newlines, msg_too_long resilience, A2A skills injection (#1218)
+- **rag**: rename ExampleEntityMatch to ExampleStructuredEntityMatch in common models (#1200)
+- **streaming**: restore 0.2.41 streaming UX with marker gate fixes and middleware toggles (#1210)
+- **ui**: auth hardening + credentials_ref env var validation (#1211)
 - **ingestors**: defer credential validation to runtime in slack/webex ingestors
 - **compose**: remove slack-ingestor and webex-ingestor services
 - **deps**: re-lock agent uv.lock files to pin beautifulsoup4==4.14.3
@@ -217,42 +722,6 @@
 - **subagent**: truncate content inside (content, artifact) tuples
 - **docker**: install gh CLI in supervisor container
 - **subagent**: normalize MCP tool results for content_and_artifact format
-
-### Refactor
-
-- **rag**: rename graph entity to structured entity
-- consolidate A2A server into shared abstraction (#1116)
-- **subagent**: make _truncate_any shape-agnostic
-
-## 0.2.43 (2026-04-02)
-
-### Feat
-
-- add Grype container scan on version tag push (#1084)
-- **github**: deploy GitHub MCP server as separate HTTP pod (#1077)
-- create snyk-container.yml
-- **backstage-ingestor**: add BACKSTAGE_AUTH_MODE for multi-mode auth
-- **ui**: add data freshness visibility and cleanup controls
-- **rag**: add safe bulk cleanup with failed job protection
-- **rag**: update all ingestors to use get_fresh_until()
-- **rag**: add fresh_until calculation and reload_interval field
-- **supervisor**: add tool error resilience, workflow introspection, and form pre-population (#1062)
-- **rag**: improve MCP search tools and UI
-- **aws**: add AWS CLI and kubectl tools to single-node AWS subagent
-- **helm**: propagate global.checkpointPersistence to all agent subcharts (#1023)
-- **skills**: skills middleware integration with gateway API (#1024)
-- **dynamic-agents**: add LOG_LEVEL env var and reduce log verbosity
-- **dynamic-agents**: add backend cancellation for stop button
-- **dynamic-agents**: add progressive turn loading and chat download
-- **dynamic-agents**: add timeline UI for streaming agent responses
-- **dynamic-agents**: add namespace correlation for subagent SSE events
-- **ui**: redesign inline event cards with interleaved rendering
-- **ui**: show tool/subagent calls inline in chat panel
-- **slack**: replace custom MCP with korotovsky/slack-mcp-server v1.2.3 (#1036)
-- **victorops**: multi-org support via VICTOROPS_ORGS env var
-
-### Fix
-
 - **rag**: restore per-result fetch_document markers + raise cap to 10 + 49 tests (#1069)
 - pin all GitHub Actions to immutable commit SHAs (#1082)
 - use workflow_run to post coverage comments from fork PRs (#1081)
@@ -275,49 +744,10 @@
 - **sse**: properly encode newlines in SSE content events
 - **ui**: handle SSE newlines - empty data: becomes \n
 - **ui**: improve typing indicator and fix markdown newlines
-
-### Refactor
-
-- **ui**: use shared formatRelativeTimeCompact utility
-- **rag**: standardize ruff formatting to 2-space indentation
-- **aws**: remove dynamic args schema — profiles covered by system prompt
-- **dynamic-agents**: simplify agent panel and collapse by default
-- **dynamic-agents**: unify DA history loading with standard chat
-- **ui**: unify streaming/final markdown rendering in chat
-- **dynamic-agents**: remove final_result event and runtimeStatus
-
-## 0.2.42 (2026-03-24)
-
-### Feat
-
-- **argocd**: add directory_recurse parameter to create_application
-
-### Fix
-
 - **slack-bot**: prevent posting to main channel when thread message is deleted (#1034)
 - **slack-ingestor**: detect lookback_days config changes and trigger full re-ingestion (#1035)
 - **executor**: plan step attribution, false final answer, and sub-agent source bugs (#1025)
 - **ui**: auto-sync system task configs when task_config.yaml changes
-
-## 0.2.41 (2026-03-19)
-
-### Feat
-
-- **checkpointer**: per-agent MongoDB checkpoint isolation with auto-prefix (#1017)
-- **dynamic-agents**: add file deletion from context panel
-- **dynamic-agents**: add loading state and simplify file tree
-- **dynamic-agents**: add files tree to context panel
-- **helm**: change default imagePullPolicy from Always to IfNotPresent since we do not do stable/latest tags anymore
-- **subagents**: centralise MCP mode variabled into utils
-- **helm**: add mcp deployments in parent chart for single-node HTTP case
-- **helm**: subagent level llm secrets will be moved to use agentSecrets instead
-- **ci**: branch with *-single-node-* will not prebuild subagent images
-- **helm**: add support for subagent level mcp variables and add user_input subagent prompt file mount
-- rename "caipe" subagent to "user_input" subagent
-- allow sub-agent level MCP mode + addr
-
-### Fix
-
 - **ui**: detect stale system templates in seed status check (#1020)
 - **dynamic-agents**: rename logging.py to avoid stdlib collision
 - **feedback**: fix DM scoring name, align Langfuse scores across Slack and UI (#1018)
@@ -325,30 +755,6 @@
 - **helm**: remove mongodb runtime dependency
 - further renaming of caipe to user_input that were missing
 - **helm**: ensure single-node creates each subagent prompt configs and some cleanups
-
-### Refactor
-
-- **dynamic-agents**: use API endpoint for todos instead of SSE events
-- **dynamic-agents**: consolidate SSE event system into stream_events.py
-
-## 0.2.40 (2026-03-18)
-
-### Feat
-
-- **ui**: make built-in skills configurable and non-deletable (#1014)
-- **confluence**: add configurable title-based page filtering for ingestion (#996)
-- **dynamic-agents**: add per-agent gradient theme support
-- **dynamic-agents**: add export YAML and clone agent actions
-- **ui**: allow addMessage to preserve message IDs from checkpointer
-- **ui**: load Dynamic Agent chat history on conversation open
-- **dynamic-agents**: add conversations router with messages and clear endpoints
-- **dynamic-agents**: switch to MongoDB checkpointer for persistent chat history
-- **dynamic-agents**: add langgraph-checkpoint-mongodb dependency
-- **dynamic-agents**: add admin Conversations tab for managing chat history
-- **ui**: implement DynamicAgentChatPanel for phase 1 of persistent chat history
-
-### Fix
-
 - **dynamic-agents**: use os._exit(1) to forcefully terminate process
 - **dynamic-agents**: use sys.exit(1) to ensure process terminates
 - **dynamic-agents**: require MongoDB at startup with retry logic
@@ -358,65 +764,6 @@
 - **ui**: audit chat preservation, loading UX, admin navigation, and report-a-problem (#1010)
 - **ui**: add yaml dependency and fix streaming route types
 - **ui**: use getAuthenticatedUser for Dynamic Agent streaming routes
-
-### Refactor
-
-- **dynamic-agents**: extract fatal_exit() function for reusability
-- **dynamic-agents**: simplify agent_runtime.py
-- **dynamic-agents**: consolidate user context into single UserContext object
-- **dynamic-agents**: simplify SSE error handling
-- **dynamic-agents**: consolidate access control into auth/access.py
-- **dynamic-agents**: consolidate logging into logging.py
-- **dynamic-agents**: rename middleware/ to auth/
-- **dynamic-agents**: remove BUILTIN_TOOLS distinction
-- **dynamic-agents**: make stream trackers stateless
-- **dynamic-agents**: remove dead code
-- **dynamic-agents**: remove prompts/ folder and extension prompt feature
-
-## 0.2.39 (2026-03-17)
-
-### BREAKING CHANGE
-
-- Model config field renamed from 'id' to 'model'
-
-### Feat
-
-- **ui,slack-bot**: add structured timeline and plan-mode streaming (#985)
-- **docs**: implement helm chart documentation generator (#1003)
-- **aws-agent**: block kubectl get/describe secrets and sanitize output (#977)
-- **persistence**: add Redis, Postgres, and MongoDB checkpoint and store persistence (#909)
-- **docker**: add build context and volume mounts for RAG dev services (#986)
-- **dynamic-agents**: add HITL forms using HumanInTheLoopMiddleware pattern
-- **ui**: add VictorOps icon to integration orbit (#972)
-- **dynamic-agents**: add conversation ID display and improve logging
-- **dynamic-agents**: add builtin tools and API restructuring
-- **dynamic-agents**: add llmSecret support for LLM credentials
-- **dynamic-agents**: add seedConfig support for MCP servers and agents
-- properly support all llm providers
-- **single-node**: allow sub-agent level llm key
-- **helm**: add dynamic-agents feature flags to caipe-ui config
-- **helm**: add dynamic-agents subchart
-- **dynamic-agents**: add CI/CD infrastructure
-- **dynamic-agents**: add config-driven seed agents and MCP servers
-- **dynamic-agents**: persist MCP warnings across chat messages
-- **dynamic-agents**: add resilient MCP connections, restart runtime, and session logging
-- **dynamic-agents**: add team sharing UI for visibility selection
-- **custom-agents**: warn users when MCP tools are unavailable
-- **custom-agents**: UX makeover with step wizard and improved tools UI
-- **dynamic-agents**: fix model/provider sync and enhance UI
-- **dynamic-agents**: add model selection with provider support
-- **dynamic-agents**: add fetch_url built-in tool with domain ACL
-- **dynamic-agents**: add subagent delegation support
-- **dynamic-agents**: add Langfuse tracing support
-- **ui**: separate chat views for Platform Engineer and Dynamic Agents
-- **ui**: improve Dynamic Agents chat UX with agent selection
-- **ui**: add Dynamic Agents admin UI and chat integration
-- **dynamic-agents**: add FastAPI backend service for dynamic agent builder
-- **slack-bot**: add podAnnotations support to helm chart (#943)
-- **slack-bot**: add podAnnotations support to helm chart (#943)
-
-### Fix
-
 - **slack-bot**: improve kb search prompt for better retrieval and confidence assessment (#1009)
 - **setup**: support curl-pipe execution and add welcome banner (#1004)
 - **docs**: resolve broken links, fix Helm chart symlinks, and fix setup script (#1002)
@@ -461,49 +808,8 @@
 - **deepagent**: prevent write_todos infinite loop when all tasks completed
 - **policy**: include policy.lp in helm chart and handle empty policy file
 - **auth**: forward OAuth2 token in /api/agents/tools proxy route
-
-### Refactor
-
-- **ui**: proxy write operations to dynamic-agents backend
-- **charts**: replace task_config and policy with stubs
-- **dynamic-agents**: use timezone-aware datetimes throughout
-- **dynamic-agents**: rename model to model_id in models config
-- **dynamic-agents**: move imports to top of files
-- **dynamic-agents**: rename model config 'id' to 'model'
-- **dynamic-agents**: replace verbose SSE events with structured JSON
-- **ui**: remove AgentSelector from chat panel header
-
-## 0.2.38 (2026-03-11)
-
-### Feat
-
-- improve manual release by splitting steps for easier retry
-
-### Fix
-
 - **ci**: github action to trigger ci properly in a new step
-
-## 0.2.37 (2026-03-11)
-
-### Fix
-
 - prevent auto-redirect to shared/public conversations leaking context_id across users
-
-## 0.2.36 (2026-03-09)
-
-### Feat
-
-- **policy**: add two-tier policy system with dynamic tool discovery
-- **ui**: add Task Builder card to home page platform capabilities
-- sub-agent to use context summarisation + refine search req
-- **rag**: replace single graph_tools_enabled toggle with individual per-tool flags
-- use Github app to bypass branch protection rule during release
-- **task-builder**: scope custom workflows per-user
-- **supervisor**: inject self-service workflows into prompt via middleware
-- **agent-github**: connect to GitHub Copilot MCP API in multi-node mode (#907)
-
-### Fix
-
 - **a2a**: make user_id passing conditional in agent executor (#937)
 - **tasks**: apply env var substitution to MongoDB-sourced task configs
 - **single-node**: load GitHub MCP tools via local go run server
@@ -516,43 +822,9 @@
 - **supervisor**: port Phase 1/Phase 2 error recovery to single-node agent
 - **docker**: include vault_utils.py in supervisor image
 - resolve merge conflicts with main
-
-### Refactor
-
-- **ui**: use dynamic APP_NAME in task builder instead of hardcoded CAIPE
-
-## 0.2.35 (2026-03-05)
-
-### Feat
-
-- **aigateway**: add Vault integration and single-node agent configuration (#898)
-- **ui**: add admin audit logs with export and owner search (#894)
-- **ui**: add dashboard-style home page with shared conversations and insights (#896)
-- **ui**: admin - add feedback visibility, NPS campaigns, and admin audit mode (#893)
-
-### Fix
-
 - **victorops**: fix deployment issues in victorops agent (#903)
 - **slack-bot**: silence unhandled reaction event warnings (#905)
 - **docs**: escape MDX curly braces in ADR to fix Docusaurus build (#902)
-
-## 0.2.34 (2026-03-04)
-
-### Feat
-
-- **ui**: add share with everyone for conversations (#891)
-- **ui**: live status, input-required, and unviewed message indicators (#892)
-- **task-builder**: add live workflow discovery and MongoDB integration for single-node dev
-- **task-builder**: add UX enhancements to visual workflow editor
-- **task-builder**: add visual Task Builder with MongoDB persistence
-- **ui**: add preferences modal with categorized feature flags (#865)
-- add custom mention prompts (#888)
-- **rag**: add configurable MCP server for RAG (#875)
-- **ui**: add multiselect toggle and comma-separated values to metadata form (#880)
-- **memory**: add cross-thread store and automatic fact extraction (#861)
-
-### Fix
-
 - **rag**: use dynamic RAG tool names instead of hardcoded list
 - **rag**: make MCP authentication optional
 - **ui**: use bulk API for initial datasource job fetching
@@ -560,29 +832,10 @@
 - sub-agent needs to handle gracefully when no secret is needed
 - **slack-bot**: disable retryable writes for DocumentDB compatibility (#886)
 - **slack-bot**: correct image repository to caipe-slack-bot (#884)
-
-## 0.2.33 (2026-03-03)
-
-### Feat
-
-- **caipe-ui**: add existingSecret support for pre-existing secrets (#862)
-
-### Fix
-
 - **ci**: replace pull_request_target with pull_request for security
 - **auth**: return 401 when unauthenticated on protected routes (#882)
 - **docs**: escape nested quotes in ADR front matter title (#881)
 - **slack-bot**: skip duplicate CAIPE_URL in env map loop (#879)
-
-## 0.2.32 (2026-03-02)
-
-### Feat
-
-- **slack-bot**: add X-Client-Source header and parent Helm chart wiring
-- **slack-bot**: upstream Slack bot integration into CAIPE platform
-
-### Fix
-
 - delete old files
 - move slack-bot chart under ai-platform-engineering chart
 - **slack-bot**: move Dockerfile to build/ and add to release-finalize
@@ -592,33 +845,7 @@
 - **slack-bot**: fix gitleaks false positive and UI test assertion
 - **slack-bot**: address review issues from forge-slack-bot upstream validation
 - **github**: multi-node uses gh CLI, single-node uses MCP STDIO
-
-## 0.2.31 (2026-02-28)
-
-### Fix
-
 - align netutils chart alias and disable secrets for demo agents (#871)
-
-## 0.2.30 (2026-02-28)
-
-### Refactor
-
-- rename network_utility agent to netutils (NetUtils) (#870)
-
-## 0.2.29 (2026-02-27)
-
-### Feat
-
-- add agent-weather and agent-petstore to helm chart (#869)
-
-## 0.2.28 (2026-02-27)
-
-### Feat
-
-- **aigateway**: deterministic Webex message and Helm task config
-
-### Fix
-
 - linter err
 - more gracefully handle error such as context too large, recursion limit etc
 - correctly handle final output when recursion limit is hit
@@ -626,73 +853,15 @@
 - **ui**: prevent HITL form from reappearing after workflow completion
 - **ci**: pin deps/build stages to BUILDPLATFORM in caipe-ui Dockerfile
 - **build**: regenerate uv.lock to sync with pyproject.toml
-
-### Refactor
-
-- **helm**: symlink task_config.yaml from charts data and remove list_self_service_tasks tool
-
-## 0.2.27 (2026-02-26)
-
-### Feat
-
-- make skill-templates independent of caipe-ui.enabled (#836)
-- **victorops**: Add Agent victorops aka Splunk On-call (#858)
-
-## 0.2.26 (2026-02-26)
-
-### Feat
-
-- **agent**: add network utility agent and MCP server (#855)
-- **rag-server**: add MCPAuthMiddleware to enforce auth on /mcp routes
-
-### Fix
-
 - **deps**: upgrade cnoe-agent-utils to 0.3.11 (#860)
 - **build**: add retry logic to npm install for transient registry errors (#859)
-
-## 0.2.25 (2026-02-25)
-
-### Feat
-
-- handle existing LLM keys, persist form on refresh, show selections
-
-### Fix
-
 - correctly send final structured output to the UI when user input is required
 - **rag**: resolve RBAC crash in ontology agent reverse proxy
 - **streaming**: use supervisor final message for final_result artifact
 - **aigateway**: remove extraneous f-string prefix in tools.py
-
-## 0.2.24 (2026-02-25)
-
-### Feat
-
-- **ui**: add interactive changelog viewer to System Settings dialog (#851)
-
-### Fix
-
 - **ui**: persist skill_content and related fields on skill creation (#852)
-
-## 0.2.23 (2026-02-25)
-
-### Fix
-
 - **ui**: auth redirect, loading spinner, theme visibility, and session resilience (#850)
 - **supervisor**: repair streaming failures from json scoping and orphaned tool calls (#842)
-
-## 0.2.22 (2026-02-24)
-
-### Feat
-
-- Support comma-separated OAUTH2_CLIENT_IDS for cid validation (#849)
-- **rag**: add batch job status endpoint for efficient datasource polling (#845)
-- **ui**: add response field to CAIPEAgentResponse for form chat text
-- **tools**: add terraform_fmt tool and fix filesystem state consistency
-- set USE_STRUCTURED_RESPONSE true by default (#840)
-- **single-node**: add structured response support and ResponseFormat tool notifications
-
-### Fix
-
 - **ui**: default canViewAdmin to true for pre-upgrade JWT sessions (#837)
 - **docker-compose**: remove jarvis from all-agents profile (#848)
 - get rid of ResponseFormat as sonnet sometimes uses this instead and breaks
@@ -708,35 +877,8 @@
 - **ui**: sync agent-config store and types with main
 - **ui**: restore agent-builder components lost during merge
 - **chart**: remove self-service env defaults that override envFrom
-
-## 0.2.21 (2026-02-23)
-
-### Feat
-
-- **ui**: replace previewMode with configurable envBadge (#834)
-- **ui**: make admin dashboard read-only for non-admin authenticated users (#833)
-- **ui**: env-configurable personalization defaults, new themes, and unified settings menu (#832)
-- **ui**: refactor Create Workflow into Skills Builder Editor with skills in helm chart (#829)
-
-### Fix
-
 - **ui**: team-shared conversations not appearing for team members (#831)
 - **confluence-ingestor**: track document_count per ingested page (#818)
-
-## 0.2.20 (2026-02-20)
-
-### Feat
-
-- **ui**: auto-enable follow_external_links when sitemap mode is selected
-- **ui**: show follow_external_links option for sitemap crawl mode
-- **webloader**: show sitemap URL in job success message
-- **chart**: add agent-weather dependency and remoteAgent bypass for single-node
-- **ui**: add support to UI's admin page for prometheus metrics dashboard (#826)
-- **ui**: add WORKFLOW_RUNNER_ENABLED feature flag (#823)
-- **github-mcp**: add invite_user_to_org tool and parameterize task config
-
-### Fix
-
 - **webloader**: don't append /sitemap.xml when URL already points to a sitemap
 - **webloader**: disable Scrapy telnet console
 - **webloader**: propagate CloseSpider reason to job error message
@@ -752,25 +894,6 @@
 - persist user input on the UI after refresh or page return
 - **rag**: prioritize JWT auth over trusted network (#815)
 - **confluence-ingestor**: accept CONFLUENCE_API_TOKEN as fallback for CONFLUENCE_TOKEN (#814)
-
-### Refactor
-
-- **webloader**: add job_id prefix to all spider log messages
-- move field_values sorting from code to task config
-
-## 0.2.19 (2026-02-18)
-
-### Feat
-
-- **ui**: add reload interval UI and help popup for RAG ingest
-- **rag**: add per-datasource reload interval for webloader
-- **ui**: support comma-separated OIDC_GROUP_CLAIM values
-- **ui**: remove X-Identity-Token header from RAG proxy
-- **rag**: implement tiered groups resolution with Redis caching
-- **rag**: add userinfo endpoint support for fetching user groups
-
-### Fix
-
 - **supervisor**: send supervisor synthesis as final_result in single sub-agent scenario (#809)
 - **github**: fix streaming
 - **github**: fix github mcp
@@ -781,82 +904,14 @@
 - sync UI code with main and regenerate webex mcp uv.lock
 - resolve merge conflicts with main (RAG proxy comments, auth-config docs)
 - **rag**: fix lint issues in rbac.py
-
-### Refactor
-
-- **rag**: always fetch userinfo for user claims (email + groups)
-
-## 0.2.18 (2026-02-17)
-
-### Feat
-
-- **single-node**: add user email context, fix recursion limit, and fix webex mcp
-- **rag-ui**: add 'Restrict to this page' button for SPA tab scraping
-- Return trace_id to clients for Langfuse feedback (#805)
-
-### Fix
-
 - **rag**: improve web crawler with streaming ingestion, redirect handling, and JS rendering
 - **ui**: replace hardcoded CAIPE references with configurable appName (#806)
 - mongodb sts can NOT rely on labels that are dependent on the chart version (#804)
-
-## 0.2.17 (2026-02-13)
-
-### Fix
-
 - manual release is missing ci-caipe-ui
 - lint err
 - don't call _get_final_content if using response_format_tool
 - ui to render field_options correctly with the new structured final output using field_values
 - Merge origin/main into feat/add-structured-response-v2
-
-## 0.2.16 (2026-02-13)
-
-### Feat
-
-- **ui**: track message sender identity for shared conversations
-- **ui**: show user first name instead of 'You' in chat messages
-- introduce new was_task_successful and depricate request_user_input if USE_STRUCTURED_RESPONSE is true
-- add support for USE_STRUCTURED_RESPONSE where LLM uses structured response tool call as its final output
-- **a2a**: add source agent tracking for sub-agent message grouping
-- agent resilience, registry exclusions, and infra improvements
-- **rag-stack**: add PodDisruptionBudgets for Milvus components
-- add agentgateway helm chart under ai-platform-engineering
-- introduce new was_task_successful and depricate request_user_input if USE_STRUCTURED_RESPONSE is true
-- add support for USE_STRUCTURED_RESPONSE where LLM uses structured response tool call as its final output
-- **ui**: add configurable favicon via NEXT_PUBLIC_FAVICON_URL
-- **ui**: rename Agentic Workflows to Skills and add icon customization
-- **rag**: add slim ingestors variant and consolidate CI matrix
-- **github**: add private key path passthrough and clean up env example
-- **github**: add token sanitization to prevent credential leakage
-- **github**: add GitHub App token auto-refresh for MCP authentication
-- **ui**: add user insights page, enhanced admin dashboard, and chat performance improvements
-- **ui**: add crash recovery with interrupted message detection and task polling
-- **ui**: add copy-to-clipboard for access token and ID token in user menu
-- **ui**: add conversation archive with soft-delete, restore, and auto-purge
-- **ui**: add silent token refresh and dismiss persistence for expiry guard
-- **ui**: persist chat messages and A2A events to MongoDB for cross-device sync
-- **ui**: sync UI personalization to MongoDB for cross-device persistence
-- **ui**: implement team management — view details, manage members, delete teams
-- **ui**: add branding env vars to docker-compose and helm values
-- **ui**: replace NEXT_PUBLIC_ with runtime config via /api/config
-- **rag-server**: reduce Docker image size by making HuggingFace optional
-- **helm**: simplify rag-server config to use generic env map
-- **embeddings**: add LiteLLM proxy support for embeddings
-- **auth**: add X-Identity-Token header support for ID token claims extraction
-- **ingestors**: add status messages for JavaScript rendering mode
-- **build**: add Playwright/Chromium support to ingestors image
-- **ingestors**: add backwards compatibility for deprecated settings fields
-- **ui**: display document and chunk metrics in ingest view
-- **server**: add chunk count tracking and cleanup utility
-- **ingestors**: integrate Scrapy loader into web ingestor
-- **common**: add ScrapySettings model and job metrics tracking
-- **ingestors**: add Scrapy-based web loader infrastructure
-- **a2a**: emit per-task tool notifications for deterministic workflows
-- simplify deployment to single-node deep agent architecture
-
-### Fix
-
 - **ui**: auto-select conversation and preserve messages on tab switch
 - resolve lint errors in dedup tests and agent_executor
 - **streaming**: extend dedup to _handle_task_complete and add comprehensive tests
@@ -914,87 +969,6 @@
 - **ui**: remove container healthcheck and align RAG_SERVER_URL usage
 - **ui**: replace build-time env vars with runtime PublicEnvScript injection
 - **ci**: ensure caipe-ui builds on RC tag pushes
-
-### Refactor
-
-- **ui**: remove ENABLE_SUBAGENT_CARDS flag and Agent Stream card boxes
-- **ui**: remove localStorage cache in MongoDB mode, use upsert for messages
-- **ui**: move Personal Insights to user menu, replace Recent Prompts with Skill Usage
-- **ui**: rename Agentic Workflows to Agent Skills
-- **ui**: use Palette icon for UI Personalization button
-- **ui**: rename Settings to UI Personalization with Paintbrush icon
-- **ui**: replace /api/config fetch with window.__APP_CONFIG__ injection
-- **ui**: replace useConfig() with getConfig()/config imports
-
-### Perf
-
-- **ui**: fix scroll performance, A2A Debug rendering, and history re-renders
-
-## 0.2.15 (2026-02-05)
-
-### Feat
-
-- **ui,rag**: add RAG disable feature and trusted network config
-- **ui**: add version display in System Status popover
-- **gitlab**: add MCP server config and comprehensive documentation
-- **rag**: add JWT authentication and RBAC documentation
-- **ci**: enhance CAIPE UI test coverage reporting in PRs
-- **ci**: add CAIPE UI test automation and fix test mocks
-- **ui**: add mongodbEnabled to config system
-- **docker**: add CAIPE UI service with MongoDB integration
-- **docker**: add CAIPE UI with MongoDB profiles and enable flag
-- **ui**: compress streaming events in A2A timeline views
-- **ui**: redesign A2A timeline with trace view and fix workflow history thumbnail
-- **ui**: move workflow history to right panel and improve UX
-- **ui**: add A2A timeline view and fix workflow thumbnail markdown rendering
-- **charts**: integrate MongoDB and update CAIPE UI configuration
-- **charts**: add ingress redirect template for domain migration
-- **charts**: add MongoDB Helm subchart for CAIPE UI persistence
-- **ui**: add dedicated workflow history page
-- **ui**: back button now opens workflow history panel
-- **ui**: add CAIPE spinner overlay while saving workflow
-- **ui**: migrate favorites from localStorage to MongoDB
-- **ui**: add structured user input form rendering
-- **backend**: add UserInputMetaData artifact support for request_user_input
-- **ui**: improve OIDC info dialog and fix auth initialization
-- **ui**: add AuthGuard to all knowledge-bases and admin pages
-- **ui**: disable admin tab when MongoDB is not configured
-- **ui**: restore three-panel chat layout with MongoDB persistence
-- **agentic-workflows**: enhance execution output with fullscreen and copy features
-- add favorites and edit functionality to quick-start templates
-- move 'Run in Chat' to quick-start dialog
-- add 'Run in Chat' button to agent builder
-- **sidebar**: implement hover-based visibility for share and delete buttons
-- **sidebar**: add resizable width, truncation indicator, and dynamic text expansion
-- add agent builder UI and MongoDB chat history improvements
-- **ui**: add admin dashboard, teams management, and various UI improvements
-- **ui**: make agents selection optional in Use Case Builder
-- **ui**: implement share button and dialog for conversations
-- **ui**: integrate MongoDB persistence with chat UI
-- **ui**: implement complete MongoDB persistence with Next.js API routes
-- **dev**: add mongo-express web UI for MongoDB management
-- **backend**: integrate chat API routes with FastAPI server
-- **ui**: complete Phase 3 - share dialog and status UI
-- **ui**: implement Phase 3 core - UUID routing and MongoDB integration
-- **backend**: implement Phase 2 - audit logging and notifications
-- **backend**: implement MongoDB chat history backend (Phase 1)
-- **dev**: add MongoDB service to docker-compose.dev.yaml
-- **rag**: ui improvements for rbac, configs and readme
-- **rag**: auth rework for user and ingestor
-- **ui**: unified connection status popup
-- **ingestor**: add OAuth2 client credentials authentication support
-- **auth**: implement JWT validation for RAG server with multi-provider support
-- **ui**: add rag rbac to knowledge-bases tab
-- **ui**: add ingestor type availability logic; fix icons
-- **ui**: add back ingestors section
-- **task-config**: update self service tasks
-- **streaming**: enable subagent token streaming
-- **task-config**: initial task config implementation
-- **ui**: add manual refresh token button to test token validity
-- **ui**: display refresh token metadata in OIDC token dialog
-
-### Fix
-
 - **ui**: improve Docker build network resilience for npm ci
 - lint/js issues
 - **rag**: crash when collectiond doesnt exist
@@ -1072,91 +1046,7 @@
 - **webex**: fix mcp tools in webex agent and update tasks
 - **create-github-repo**: fix mcp tools and add backstage step
 - **ui**: prevent AuthGuard from getting stuck on 'Verifying authorization'
-
-### Refactor
-
-- **charts**: reorganize MongoDB under caipe-ui context
-- **ui**: complete branding update for login/logout pages
-- **ui**: update branding to Multi-Agent Collaboration & Workflow Automation
-- remove all MongoDB integration from entire project
-
-### Perf
-
-- **ui**: optimize A2A trace view timeline scaling and tick spacing
-- **ui**: reduce workflow history auto-refresh from 3s to 15s
-
-## 0.2.14 (2026-01-28)
-
-### Fix
-
 - **ui**: resolve TypeScript build error blocking CI
-
-## 0.2.13 (2026-01-28)
-
-### Feat
-
-- **ui**: add user context tracking to backend messages
-- **ui**: add Popover component
-- **ui**: display integration tags in connection status
-- **ui**: enhance user menu and connection status
-- **ui**: add horizontal scroll to markdown tables
-- **ui**: add advanced theme settings with gradient controls
-- **ui**: move Tech section to user menu as 'About'
-- **ui**: apply gradient themes across all pages, icons, and widgets
-- **ui**: add gradient theme selector with 5 theme options
-- **ui**: implement @mention autocomplete for agent selection
-- **ui**: move stop button to text input area
-- **ui**: enhance textbox focus state with stronger visual feedback
-- **ui**: replace textarea with auto-growing textarea component
-- **ui**: add ui path routing
-- **tests**: add Make targets for CAIPE UI tests
-- **ui**: make OIDC refresh token support optional and gracefully degrade
-- **ui**: implement OIDC refresh token support for seamless authentication
-- **docs**: add CAIPE UI section to sidebar navigation
-- **makefile**: add documentation site targets
-- **ui**: enhance A2A debug panel with execution plan and full event streaming
-- **ui**: implement runtime configuration and enhance SSO user menu
-- **helm**: add external secrets and configmap support for caipe-ui
-- **usecases**: add edit functionality and fix placeholder detection
-- **ui**: migrate to @a2a-js/sdk and improve streaming UX
-- **ui**: add retry button to regenerate responses
-- **a2a**: improve streaming reliability and UI performance
-- **helm**: add caipe-ui subchart with ingress support
-- **ui**: add RAG integration, layout settings, and dark mode improvements
-- **helm**: add caipe-ui subchart with ingress support
-- **ui**: add download button for A2A events in debug panel
-- **ui**: persist tool notifications with collapsible history
-- add Docker build targets and fix nginx.conf
-- **ci**: add CAIPE UI Docker build workflow and reorganize Dockerfile
-- add caipe-ui make targets for running the UI
-- **ui**: add visual feedback to JSON copy button in A2A debug
-- **ui**: add Linux logo and fix favicon
-- **ui**: update IntegrationOrbit with official full-color logos
-- **ui**: add GitHub PR Review use case with input form
-- **ui**: use full-color original SVG logos in task list
-- **ui**: add official agent logos to task list and agent selector
-- **ui**: implement agent-forge features - feedback, copy, tasks, agent selection
-- **ui**: persist A2A events, tasks, and output to localStorage
-- **ui**: implement per-conversation streaming state
-- **ui**: add Tasks tab to ContextPanel for execution plan display
-- **ui**: expand streaming output by default during streaming
-- **ui**: full-width two-panel layout for login and logout
-- **ui**: add integration orbit animation to logout page
-- **ui**: update integration logos with accurate SVG icons
-- **ui**: disable panel resizing on Use Cases tab
-- **ui**: add resizable panels for sidebar, chat, and context
-- **ui**: show descriptive tool notifications with wrench emoji
-- **ui**: show connected URL in status indicator
-- **ui**: persist chat history to localStorage
-- **ui**: add branded loading screen component
-- **ui**: add logout page and improve auth flow
-- **ui**: add font options and settings panel
-- **ui**: make OIDC group claim configurable
-- **ui**: add OIDC SSO with group-based authorization
-- add caipe-ui using a2ui, copilotkit
-
-### Fix
-
 - **ui**: prevent session expiry flickering between modal and redirect
 - **ui**: convert connection status tooltip to popover
 - **ui**: font family selection now applies correctly
@@ -1221,72 +1111,14 @@
 - **ui**: fix React child rendering error in ContextPanel
 - **ui**: add spin animation and improve login loading screen
 - **rbac**: add email validation, audit logging, role validation, and improve documentation
-
-### Refactor
-
-- **ui**: update tech stack to show only actively used technologies
-- **ui**: remove [FINAL ANSWER] logic, display streamed content as-is
-- **ui**: simplify ContextPanel with Tasks as default tab
-
-### Perf
-
-- **ui**: optimize chat performance and prevent OOM issues
-
-## 0.2.12 (2026-01-22)
-
-### Feat
-
-- **spec-kit**: add Cursor rules for CAIPE development
-- initialize Spec Kit at repository root
-
-### Fix
-
 - **supervisor**: synthesize results from all sub-agents in multi-agent queries
-
-## 0.2.11 (2026-01-21)
-
-### Feat
-
-- add authn to rag-stack chart
-- add role/userinfo to ui, fix ingestor type not availalbe
-- add RBAC to rag server endpoints
-
-### Fix
-
 - extract context_id from supervisor message metadata for conversation continuity
 - **ci**: make helm rc bump to directly trigger pre-release push
 - **ci**: force re-registration of workflow_run trigger
 - lint issues
 - add missing models
 - do not include agentForge CI in the finalise and fix arm64 build
-
-## 0.2.10 (2026-01-20)
-
-### Fix
-
 - **redis**: use Recreate strategy with persistent volumes
-
-## 0.2.9 (2026-01-20)
-
-### Feat
-
-- **supervisor**: add [FINAL ANSWER] marker to filter thinking messages
-- **tools**: consolidate utility tools into utils/agent_tools
-- **tools**: add git auth support and beads-github sync
-- **platform-engineer**: integrate new utility tools into deep agent
-- **tools**: add utility tools for git, grep, wget, curl, glob, and memory
-- **aws**: add tracing configuration and disable A2A framework tracing
-- **rag**: Refactor Confluence ingestor to use json-based configuration
-- **gitlab**: add GitLab agent configuration and minimal prompt config
-- **gitlab**: add GitLab agent
-- **beads**: add A2A Streaming Improvements epic and tasks
-- add beads (bd) issue tracking system
-- use new helm chart GHCR oci://ghcr.io/cnoe-io/charts/* so it does not collide with legacy charts
-- new release pipeline to automate helm version and image tagging
-- **confluence-rag**: Implement confluence rag ingestor v2
-
-### Fix
-
 - **executor**: prevent duplicate responses when sub-agent completes
 - **supervisor**: add prominent [FINAL ANSWER] instruction to core constraints
 - **tests**: update tool tests to match string-based return API
@@ -1300,49 +1132,10 @@
 - **tracing**: configure LangGraph model with agent name for proper observations
 - **rag**: Allow discovery with fewer entities
 - inf loop bug; hf api token
-
-### Refactor
-
-- **executor**: simplify agent_executor and add streaming fix
-- **executor**: remove unused routing logic and dead code
-- **a2a**: remove redundant import aliases
-- move git tools to utils with GitHub/GitLab support
-- **tools**: move git_* tools to GitHub agent
-- **tools**: move memory tool to separate PR
-
-## 0.2.8 (2025-12-22)
-
-### Feat
-
-- **helm**: make rag prompt configurable
-
-### Fix
-
 - **docker-compose.yaml**: add rag_web_ingestor
 - **helm**: make grafana dashboard label configurable
 - rag tool and prompt optimizations
 - critical fix for ingestor
-
-## 0.2.6 (2025-12-16)
-
-### Feat
-
-- add langfuse to agent ontology
-- **prompts**: make analyze_query mandatory for all queries
-- **agents**: add SOPs, table formatting, and context scoping to Confluence, PagerDuty, AWS
-- **splunk**: add Splunk Cloud Platform MCP log search integration
-- **langmem**: add proactive pre-flight context check to supervisor
-- **langmem**: add centralized LangMem utility with observability
-- **multi-agents**: add langmem dependency for supervisor
-- **agents**: implement comprehensive context management and error recovery
-- **agents**: add intelligent tool output truncation for context management
-- **github-agent**: add gh CLI tool for workflow log retrieval and debugging
-- **prompts**: add GitHub Actions log retrieval from URLs
-- **agents**: add MCP tool error handling to prevent A2A stream closure
-- **prompts**: add GitHub agent formatting SOP and context awareness
-
-### Fix
-
 - clean-up
 - reconcile
 - **docker-compose.dev.yaml**: revert to stable
@@ -1373,72 +1166,6 @@
 - **agents**: correct LangMem API usage and import order
 - **github-agent**: add GH_TOKEN environment variable for gh CLI authentication
 - **docker-compose.yaml**: add RAG_SERVER_URL
-
-### Refactor
-
-- **prompt**: reconcile jarvis prompt with deep_agent optimizations
-- **prompt**: make source citation generic and add prompt chaining
-- **prompt**: make agent prefixes generic in supervisor prompt
-- **prompts**: replace analyze_query with [Agent] prefix format
-- **agents**: use LLMFactory for LangMem summarization
-
-## 0.2.5 (2025-12-12)
-
-### Feat
-
-- webui ingest view now supports pagination
-- **docs**: add development guide
-- add github ingestor
-- move confluence to use official mcp image by default in helm
-- **build**: add test-agent-argocd target for agent unit tests
-- **confluence**: apply sooperset/mcp-atlassian to production docker-compose
-- **confluence**: replace custom MCP server with sooperset/mcp-atlassian
-- **aws**: improve ECR URL parsing and repository search
-- **supervisor**: add AWS agent for Kubernetes debugging
-- **jira**: enhance MCP error handling and epic linking workflow
-- auto-inject current date into ALL agent queries globally
-- **aws**: auto-inject current date into every query
-- **aws**: add smart date usage - only fetch dates when actually needed
-- **aws**: add smart namespace auto-discovery for kubectl operations
-- **aws**: add kubectl logs support and documentation
-- **aws**: add Phase 7 - Kubernetes pods status to EKS health check SOP
-- **aws**: add EKS kubectl tool with temporary kubeconfig management
-- **aws**: add comprehensive EKS cluster health check SOP
-- **aws**: broaden planning workflow triggers beyond 'all' queries
-- **aws**: implement planning mode with reflection sub-agent
-- upgrade langchain to 1.x for deepagents compatibility
-- **aws**: integrate deepagents for context management and auto-offloading
-- **aws**: prompt agent to ask for account when not specified
-- **docker**: add AWS CLI, kubectl, jq and multi-account configuration
-- **supervisor**: update AWS agent routing to support all services and cost queries
-- **aws**: enhance AWS agent system prompt for multi-account and cost queries
-- **aws**: add AWS CLI tool with cross-account support and reflection capabilities
-- add reflection and autonomous retry to supervisor and jira agents
-- **jira**: add explicit update verification and confirmation workflow
-- **jira**: add intelligent field handling and fallback for custom fields
-- **jira**: add filter management tools and board creation workflow
-- **jira**: add comprehensive MCP tools and enhanced security
-- **docker**: add section headers and slim transport configuration
-- **docker**: refactor docker-compose.dev.yaml for better configurability
-- **agent-forge**: improve build workflow and add local build tooling
-- **supervisor**: add ambiguous terms clarification for multi-agent queries
-- **jira**: add reflection and auto-retry strategy for failed searches
-- **jira**: add get_epic_issues tool and improve agent reliability
-- **jira**: add read-only mode, mock responses, and improve error propagation
-- **jira**: implement dynamic field discovery and schema validation
-- add grafana dashboard to helm chart
-- add grafana-dashboard
-- rag intertation with supervisor
-- also update docker-compose files in main dir to volume mount
-- just some more logging
-- bump charts
-- make all sub-agent prompts configurable
-- also enable metric from each sub-agent
-- default metric to false and use global with helper
-- add prometheus metrics support
-
-### Fix
-
 - remove unused var
 - update .gitleaksignore
 - remove agent_rag pyproject/uv
@@ -1530,49 +1257,9 @@
 - **test**: add komodor test prompt
 - **lint**: fix linting
 - **komodor**: regenerate mcp from openapi spec
-
-### Refactor
-
-- **aws**: make system prompt generic and fix linting issues
-- **argocd-mcp**: pin dependencies to latest compatible versions
-- **deps**: clean up and align pyproject.toml files
-- **build**: remove redundant dev dependencies and pytest config
-- **build**: add individual MCP test targets for granular testing
-- **build**: decouple test targets for better modularity
-- **aws**: remove company-specific references from system prompt
-- **aws**: rename agent.py to agent_strands.py
-- **aws**: replace company-specific references with generic placeholders
-- remove Komodor agent from supervisor configuration
-- **aws**: update Strands agent imports and AWS CLI tool integration
-
-### Perf
-
-- **aws**: optimize agent performance with reduced timeouts and semaphores
-- **langgraph**: increase recursion limit to 100 for large batch operations
-
-## 0.2.4 (2025-11-24)
-
-### Feat
-
-- **argocd**: add Link column to ArgoCD application tables
-- enhance agent prompts and capabilities
-- **argocd**: implement two-tier search with automatic exhaustive fallback
-- update agents and configuration files
-
-### Fix
-
 - **tests**: ensure test file changes are committed
 - **tests**: mock LLMFactory instead of patching env vars for CI reliability
 - resolve linting errors
-
-## 0.2.3 (2025-11-21)
-
-### Feat
-
-- bump chart
-
-### Fix
-
 - **workaround**: add ENABLE_ARTIFACT_STREAMING to docker-compose
 - updates
 - set LLM_PROVIDER env var in test fixtures
@@ -1581,36 +1268,6 @@
 - correct rag-server image repository and bump chart to 0.4.10
 - **ci**: prevent docs deployment on tag pushes
 - chart was not bumped with prompt config change
-
-### Refactor
-
-- change logger.info to logger.debug for detailed streaming logs
-
-## 0.2.2 (2025-11-20)
-
-### BREAKING CHANGE
-
-- incident_engineer module is no longer available
-- Platform engineer agent now uses structured outputs
-exclusively. Legacy response formats are no longer supported.
-
-### Feat
-
-- **template**: add PetStore MCP server implementation
-- **prompts**: add error handling and security guardrails
-- bump chart
-- much shorter system prompt for deep supervisor agent
-- cahrt bump for prompt config
-- ontology agent rewrite for scale
-- add webex and argocdv3 ingestors, fix dummy ingestor
-- add embeddings factory; separate webloader
-- **tools**: add workspace operations and utility tools
-- **mcp**: add standardized entry points for MCP servers
-- **structured-outputs**: implement structured output support for agents
-- **platform-engineer**: implement structured outputs and workspace tools
-
-### Fix
-
 - **docker**: update prompt config path and fix whitespace
 - **ci**: correct workflow ID in trigger script
 - **ci**: correct workflow ID in trigger script
@@ -1658,60 +1315,6 @@ exclusively. Legacy response formats are no longer supported.
 - **ci**: ignore argocd and komodor agent tests with missing dependencies
 - **docker**: correct agent template name and improve extra_hosts docs
 - **docker**: correct agent name for petstore services in docker-compose
-
-### Refactor
-
-- **executor**: make duplicate detection deterministic and update prompt configs
-- **petstore**: migrate to BaseLangGraphAgent and shared utilities
-- remove agent initialization capabilities greeting and improve prompt config
-
-## 0.2.1 (2025-11-07)
-
-### BREAKING CHANGE
-
-- Agents must now use UserInputMetaData JSON format instead of plain text when requesting user input
-- Update A2A protocol field naming from camelCase to snake_case
-- Replace artifactId with artifact_id throughout codebase
-- Replace messageId with message_id in streaming events
-- Replace taskId with task_id in context handling
-- Replace contextId with context_id across protocol
-- Replace lastChunk with last_chunk in streaming
-- Update TypeScript schema in Agent Forge frontend to match
-
-### Feat
-
-- enhance user input transformation with detailed recipe
-- add user input metadata format and improve agent orchestration
-- add UserInputMetaData format and automatic error retry logic
-- enhance agent system with parallel execution and improved UX
-- parallelize MCP client initialization with graceful failure handling
-- add MCP initialization retry logic with configurable timeouts
-- add grep_virtual_file tool for efficient large output search
-- add critical directive to preserve sub-agent output details
-- add GitHub CI/CD failure analysis directive to system prompt
-- enhance multi-agent queries with unified tabulated results
-- add our github repo link easy for mobile
-- maintain same defaults and properly bump charts
-- add redis persistence, external secrets v1 support, and fix dependencies
-- add info on PR template
-- allow helm pre-release on fork PRs using label
-- Use more standard pattern for Helm ingress
-- build agent-forge on push to main and remove cronjob
-- Support multi-platform Docker builds (AMD64 + ARM64)
-- Update agent-forge Dockerfile for AMD64 compatibility
-- refactor a2a stream with common code and fix agent-forge workflow
-- add prompt templates and agent integration improvements
-- Add execution plan markers and creation confirmation policy
-- Major streaming architecture improvements and prompt enhancements
-- update a2a streaming and agent improvements
-- implement A2A streaming and common code refactoring
-- refactor a2a_stream with common code
-- major ingestor refactor
-- add retry when 429 Too many requests
-- add istio support and extraDeploy for custom resources
-
-### Fix
-
 - Docker Compose dev file not starting properly
 - **docs**: fix npm build errors and broken links
 - **agent-aws**: change default AWS agent backend to 'strands'
@@ -1802,40 +1405,6 @@ exclusively. Legacy response formats are no longer supported.
 - updates
 - updates
 - updates
-
-### Refactor
-
-- integrate MCP retry logic directly into initialization
-- Weather and Webex agents to use BaseLangGraphAgent
-- GitHub agent to use BaseLangGraphAgent for consistent streaming
-- Move prompt_config.yaml to charts directory and relocate docs
-- Refactor AWS agent to use BaseStrandsAgent and BaseStrandsAgentExecutor
-- **a2a**: move a2a agent and bindings code to common library
-
-## 0.1.19 (2025-10-22)
-
-### Feat
-
-- **helm**: Add flexible prompt configuration with default and deep agent modes
-- up to date helm and external secrets doc
-- **helm**: add promptConfig override support
-- adding job termination, reload and search weights
-- add mcp server for RAG
-- add Claude Agent SDK template with A2A and MCP protocol bindings
-- add dev version of complete
-- allow supervisor agent to work with any remote agent
-- add condition to rag-stack and fix webui;
-- new rag-stack chart
-- add agent_skill_examples in prompt_config
-- add ENABLE_<agent> to supervisor cm
-- use skills example config
-- agent-rag can now filter
-- dynamic docker-compose generation with persona-based profiles
-- add dynamic docker-compose generator and persona configuration
-- add agent-aws-slim and agent-petstore-slim services
-
-### Fix
-
 - better idpbuilder docs;
 - **docs**: gh pages
 - remove redundant test-data
@@ -1902,42 +1471,7 @@ exclusively. Legacy response formats are no longer supported.
 - change dense metric L2 -> COSINE
 - agent_rag now checks for graph ontology
 - lint
-
-### Refactor
-
-- **multi-agents**: consolidate agent registry with convention-based configuration
-
-## 0.1.18 (2025-10-06)
-
-### Fix
-
 - **rag**: build on all tags
-
-## 0.1.17 (2025-10-06)
-
-## 0.1.16 (2025-10-04)
-
-### BREAKING CHANGE
-
-- none
-Closes: #324
-
-### Feat
-
-- **agents**: enhance jira agent and add argocd tests
-- **agents**: enhance jira agent and add argocd tests
-- add connectors
-- add common utils
-- unified rag server
-- migrate ontology and rag agent
-- **deepagents**: add deepagents package locally
-- **backstage**: add TechDocs tools for improved documentation access
-- disable graphrag in helm chart until fixed
-- add tags to helm dependencies
-- current experiment-dev-use2-1 values
-
-### Fix
-
 - resolve RAG agent connection issues
 - lint
 - agent_rag is now like all other agents
@@ -1985,32 +1519,7 @@ Closes: #324
 - remove test_extractor.py error file
 - pin kb-rag services to sha-f3a1a25
 - fix workshop4 to specific version
-
-### Refactor
-
-- improve RAG agent configuration and testing
-- **argocd**: modernize string formatting in server.py
-
-## 0.1.15 (2025-09-19)
-
-### Fix
-
 - **ci**: A2A/MCP builds
-
-## 0.1.14 (2025-09-19)
-
-### BREAKING CHANGE
-
-- helm chart version bumped to 0.2.3
-
-### Feat
-
-- **auth**: update A2A authentication configuration
-- add additional authentication options for A2A protocol
-- add missing agent deployments for aws, splunk, webex, komodor
-
-### Fix
-
 - **ci**: A2A/MCP build and publish on main/tags
 - **ci**: A2A/MCP build and publish on main/tags
 - **ci**: A2A/MCP build and publish on main/tags
@@ -2019,65 +1528,7 @@ Closes: #324
 - lint
 - updates
 - correct commit count for prebuild GHAs
-
-## 0.1.13 (2025-09-18)
-
-### Feat
-
-- upgrade Jira agent to API v3
-
-### Fix
-
 - undo helm values.yaml
-
-## 0.1.12 (2025-09-17)
-
-### BREAKING CHANGE
-
-- test command now runs both general and RAG module tests
-- Redis service port name changed from 'http' to 'redis'
-
-### Feat
-
-- idpbuilder values
-- add OAuth2 authentication support for A2A protocol
-- add integration test workflows and improve agent Docker build automation
-- updating collection name from rag-default to rag-united
-- backend data management improvements for milvus and redis
-- adding addtional config in web UI frontend
-- add prebuild docker image github actions
-- Only build images if relevant change
-- Adding streamable http to Webex agent
-- Adding initial, optional Webex agent
-- Adding streamable http to Webex agent
-- Adding initial, optional Webex agent
-- use routing evaluator and tool match evalutor and use the expected ouptut in the dataset
-- implement new llm-trajectory match evaluator
-- redesign the trajectory and tool call match evaluator
-- **trace**: redesign trace processing method to get the tool call
-- **evals**: refactor evaluator architecture and switch to OpenAI
-- **evals**: add unified trajectory evaluator with graceful LLM fallback
-- **evals**: link dataset traces with platform engineer execution
-- **evals**: add auto-detection for Langfuse host in upload script
-- add expected_output support and separate upload functionality
-- add eval service
-- major helm chart refactor
-- implement memory-optimized batch processing for URL loading
-- update agents documentation and sidebar
-- enhance coverage reporting with detailed metrics and tables
-- **tests**: add comprehensive test suite with memory monitoring and scale tests
-- add AWS agent to include cost explorer MCP (#251)
-- add kb-rag-web to helm chart
-- add the aws agent to platform engineer (#246)
-- Addition of Agent Splunk (#247)
-- use a2a card to dynamically create client
-- added redis db management backend
-- added reranking
-- frontend now supports RAG config
-- add multiple llm provider support for graphrag
-
-### Fix
-
 - updates
 - adding generic to custom parser to scrap sites like wikipedia
 - updating docker compose for the workshop
@@ -2225,62 +1676,15 @@ Closes: #324
 - typo for logger message
 - **workshop**: switch mission4 to a different env file
 - **weather**: add self.mcp_api_key
-
-### Refactor
-
-- **evals**: improve eval run naming with readable timestamp format
-- **evals**: clean up directory structure and remove obsolete files
-- remove hardcoded agent detection and use dynamic regex patterns
-- create kb-rag-stack
-
-## 0.1.10 (2025-08-26)
-
-### Fix
-
 - **petstore**: add PETSTORE_API_KEY support
 - correct petstore mcp env var name
 - Update README.md (#230)
-
-## 0.1.9 (2025-08-26)
-
-### Fix
-
 - **github**: add ENABLE_MCP_TOOL_MATCH feature flag (#229)
 - ruff lint
 - rag ingestion crash; workshop docker file
-
-## 0.1.8 (2025-08-25)
-
-### Feat
-
-- **argocd**: add argocd sanity tests for local argocd kind instance (#224)
-
-### Fix
-
 - **petstore/weather**: bug fixes (#225)
 - **docs**: escape  in Jira MCP comparison table for MDX compatibility
 - update navigation
-
-## 0.1.7 (2025-08-25)
-
-### Feat
-
-- **workshop**: add workshop 7 docker-compose
-- add http mcp remote support for petstore and weather agents
-- implement job tracking and ingestion progress for URL processing
-- initialize frontend for KB RAG with React, Vite, and Tailwind CSS
-- create dev mission docker file
-- add petstore to docker-compose.weather
-- add multi-agent dynamic connectivity and petstore refactor
-- add weather agent with stdio mcp server
-- adding rag-ingestion pipeline
-- **brand**: update docs to CAIPE branding (#211)
-- add eval prompts (#191)
-- **docker**: use multi-stage builds to reduce container size (#198)
-- add a new graphrag helm chart
-
-### Fix
-
 - docker-compose.mission2.yaml
 - **weather**: use remove URL (#223)
 - **workshop**: remove langfuse components from mission 7
@@ -2333,99 +1737,12 @@ Closes: #324
 - wrong secretRef path
 - create json file and make graphrag optional
 - add SA field
-
-## 0.1.5 (2025-08-15)
-
-### Feat
-
-- fix Langfuse trace ID propagation in multi-agent system (#195)
-- **helm**: add useRemoteMcpServer to use remote MCP server (#193)
-- add mcp http support to helm chart (#190)
-
-### Fix
-
 - Dockerfile improvements and add .dockerignore (#197)
 - fix missing sub helm chart bump
 - mcp dockerfile to give .venv permissions (#192)
-
-## 0.1.4 (2025-08-12)
-
-### Fix
-
 - **build**: update workflow triggers
 - **build**: remove a2a prefix for agent container images
 - **build**: build and publish agents on every push to main and tags
-
-## 0.1.3 (2025-08-12)
-
-### Feat
-
-- add slim to helm chart (#187)
-- use agntcy-app-sdk to integrate with agntcy slim (#171)
-- **graph-rag**: add evaluation and tests
-- embed vidcast in idpbuilder doc
-- add a new pre-release helm chart github action
-- output URL to help user.
-- updated kb-rag from agent-rag
-- implement distributed tracing across all agents (#139)
-- add idpbuilder docs (#142)
-- allow external url as the A2A url (#122)
-- intial commit incident engineer (#111)
-- **graph_rag**: create nexigraph graph rag system (#97)
-- **rag**: doc load, embed, vector store, retrieve (#96)
-- updates
-- updates
-- remove dependency.yml
-- updates
-- update OSS artifacts and github actions
-- add some colours to the docs code block
-- add doc for eks deployment
-- **helm**: add command and args to deployment
-- **helm**: publish chart
-- add CORS and use LLMFactory
-- use cnoe_agent_utlis
-- publish helm
-- added ci pipeline
-- added ci pipeline
-- added A2A server and re-formatted
-- add A2A integration and new MCP server (#5)
-- Use cnoe utlis to get rid of llm_factory to encompass latest LLMs
-- added google's A2A server and client side
-- short term memory to the agent
-- add helm publish
-- add CORS and fix lint errors
-- use cnoe_agent_utlis instead of llm_factory
-- add agent forge
-- **agent-komodor**: add komodor agent
-- add script to automate Helm configuration for new agents
-- **docs**: add docs website
-- implement dual-mode docker-compose and update the readme and example env
-- **tracing**: use env to enable tracing
-- monkey patch a2a noise
-- implement langfuse v3
-- publish helm
-- added ci pipeline
-- added ci pipeline
-- added A2A server and re-formatted
-- add A2A integration and new MCP server (#5)
-- adding confluence agent
-- publish helm
-- added ci pipeline
-- added ci pipeline
-- added A2A server and re-formatted
-- add A2A integration and new MCP server (#5)
-- add agent-a2a-docker-build.yml
-- add mcp server support (#45)
-- **helm**: Implement helm chart (#42)
-- propogate context_id from user client LangGraph thread_id (#34)
-- **Dockerfile**: add multi-arch support
-- **cors**: add CORS and update ACP/A2A graph entry point (#11)
-- add A2A integration and new MCP server (#5)
-- adding 6th agent backstage
-- allow custom prompts via YAML config and restore original agent/platform prompt defaults
-
-### Fix
-
 - **build**: add latest tag for agent builds
 - add kb-rag to Platform Registry
 - readding new clients to kb-rag
@@ -2752,6 +2069,98 @@ Closes: #324
 
 ### Refactor
 
+- **ui**: simplify skills gallery and remove unused types
+- **rag**: rename graph entity to structured entity
+- consolidate A2A server into shared abstraction (#1116)
+- **subagent**: make _truncate_any shape-agnostic
+- **ui**: use shared formatRelativeTimeCompact utility
+- **rag**: standardize ruff formatting to 2-space indentation
+- **aws**: remove dynamic args schema — profiles covered by system prompt
+- **dynamic-agents**: simplify agent panel and collapse by default
+- **dynamic-agents**: unify DA history loading with standard chat
+- **ui**: unify streaming/final markdown rendering in chat
+- **dynamic-agents**: remove final_result event and runtimeStatus
+- **dynamic-agents**: use API endpoint for todos instead of SSE events
+- **dynamic-agents**: consolidate SSE event system into stream_events.py
+- **dynamic-agents**: extract fatal_exit() function for reusability
+- **dynamic-agents**: simplify agent_runtime.py
+- **dynamic-agents**: consolidate user context into single UserContext object
+- **dynamic-agents**: simplify SSE error handling
+- **dynamic-agents**: consolidate access control into auth/access.py
+- **dynamic-agents**: consolidate logging into logging.py
+- **dynamic-agents**: rename middleware/ to auth/
+- **dynamic-agents**: remove BUILTIN_TOOLS distinction
+- **dynamic-agents**: make stream trackers stateless
+- **dynamic-agents**: remove dead code
+- **dynamic-agents**: remove prompts/ folder and extension prompt feature
+- **ui**: proxy write operations to dynamic-agents backend
+- **charts**: replace task_config and policy with stubs
+- **dynamic-agents**: use timezone-aware datetimes throughout
+- **dynamic-agents**: rename model to model_id in models config
+- **dynamic-agents**: move imports to top of files
+- **dynamic-agents**: rename model config 'id' to 'model'
+- **dynamic-agents**: replace verbose SSE events with structured JSON
+- **ui**: remove AgentSelector from chat panel header
+- **ui**: use dynamic APP_NAME in task builder instead of hardcoded CAIPE
+- rename network_utility agent to netutils (NetUtils) (#870)
+- **helm**: symlink task_config.yaml from charts data and remove list_self_service_tasks tool
+- **webloader**: add job_id prefix to all spider log messages
+- move field_values sorting from code to task config
+- **rag**: always fetch userinfo for user claims (email + groups)
+- **ui**: remove ENABLE_SUBAGENT_CARDS flag and Agent Stream card boxes
+- **ui**: remove localStorage cache in MongoDB mode, use upsert for messages
+- **ui**: move Personal Insights to user menu, replace Recent Prompts with Skill Usage
+- **ui**: rename Agentic Workflows to Agent Skills
+- **ui**: use Palette icon for UI Personalization button
+- **ui**: rename Settings to UI Personalization with Paintbrush icon
+- **ui**: replace /api/config fetch with window.__APP_CONFIG__ injection
+- **ui**: replace useConfig() with getConfig()/config imports
+- **charts**: reorganize MongoDB under caipe-ui context
+- **ui**: complete branding update for login/logout pages
+- **ui**: update branding to Multi-Agent Collaboration & Workflow Automation
+- remove all MongoDB integration from entire project
+- **ui**: update tech stack to show only actively used technologies
+- **ui**: remove [FINAL ANSWER] logic, display streamed content as-is
+- **ui**: simplify ContextPanel with Tasks as default tab
+- **executor**: simplify agent_executor and add streaming fix
+- **executor**: remove unused routing logic and dead code
+- **a2a**: remove redundant import aliases
+- move git tools to utils with GitHub/GitLab support
+- **tools**: move git_* tools to GitHub agent
+- **tools**: move memory tool to separate PR
+- **prompt**: reconcile jarvis prompt with deep_agent optimizations
+- **prompt**: make source citation generic and add prompt chaining
+- **prompt**: make agent prefixes generic in supervisor prompt
+- **prompts**: replace analyze_query with [Agent] prefix format
+- **agents**: use LLMFactory for LangMem summarization
+- **aws**: make system prompt generic and fix linting issues
+- **argocd-mcp**: pin dependencies to latest compatible versions
+- **deps**: clean up and align pyproject.toml files
+- **build**: remove redundant dev dependencies and pytest config
+- **build**: add individual MCP test targets for granular testing
+- **build**: decouple test targets for better modularity
+- **aws**: remove company-specific references from system prompt
+- **aws**: rename agent.py to agent_strands.py
+- **aws**: replace company-specific references with generic placeholders
+- remove Komodor agent from supervisor configuration
+- **aws**: update Strands agent imports and AWS CLI tool integration
+- change logger.info to logger.debug for detailed streaming logs
+- **executor**: make duplicate detection deterministic and update prompt configs
+- **petstore**: migrate to BaseLangGraphAgent and shared utilities
+- remove agent initialization capabilities greeting and improve prompt config
+- integrate MCP retry logic directly into initialization
+- Weather and Webex agents to use BaseLangGraphAgent
+- GitHub agent to use BaseLangGraphAgent for consistent streaming
+- Move prompt_config.yaml to charts directory and relocate docs
+- Refactor AWS agent to use BaseStrandsAgent and BaseStrandsAgentExecutor
+- **a2a**: move a2a agent and bindings code to common library
+- **multi-agents**: consolidate agent registry with convention-based configuration
+- improve RAG agent configuration and testing
+- **argocd**: modernize string formatting in server.py
+- **evals**: improve eval run naming with readable timestamp format
+- **evals**: clean up directory structure and remove obsolete files
+- remove hardcoded agent detection and use dynamic regex patterns
+- create kb-rag-stack
 - prompt config to use structure output. Use UV, langgraph==0.5.3, a2a-sdk==0.2.16 (#155)
 - **docs**: simplify the top level menu (#110)
 - **agent-atlassian**: remove and update that it is split into Jira and Confluence agents (#103)
@@ -2772,3 +2181,12 @@ Closes: #324
 - docker support, clean-up, new chat client interface (#13)
 - create protocol_bindings directory for acp/a2a/mcp
 - optimize system prompt from a2a cards and skills
+
+### Perf
+
+- **ui**: fix scroll performance, A2A Debug rendering, and history re-renders
+- **ui**: optimize A2A trace view timeline scaling and tick spacing
+- **ui**: reduce workflow history auto-refresh from 3s to 15s
+- **ui**: optimize chat performance and prevent OOM issues
+- **aws**: optimize agent performance with reduced timeouts and semaphores
+- **langgraph**: increase recursion limit to 100 for large batch operations
