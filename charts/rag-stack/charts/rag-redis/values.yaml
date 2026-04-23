@@ -152,3 +152,5 @@ persistence:
 exports:
   host: "rag-redis"
   port: 6379
+
+# SUNNY
