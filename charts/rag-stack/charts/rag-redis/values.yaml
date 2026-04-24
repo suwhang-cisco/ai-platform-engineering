@@ -3,7 +3,7 @@
 # Declare variables to be passed into your templates.
 
 # This will set the replicaset count more information can be found here: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
-replicaCount: 1
+replicaCount: 6
 
 # This sets the number of old ReplicaSets to retain for rollback
 # Kubernetes will automatically clean up ReplicaSets beyond this limit
@@ -151,4 +151,4 @@ persistence:
 # Export values for parent chart import-values
 exports:
   host: "rag-redis"
-  port: 6379
+  port: 63795
