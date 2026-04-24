@@ -2,6 +2,12 @@
 
 ### Fix
 
+- **ci**: auto tag inf commits
+
+## 0.8.0-rc.18 (2026-04-24)
+
+### Fix
+
 - **ci**: prevent inf loop for release PRs
 
 ## 0.8.0-rc.17 (2026-04-24)
