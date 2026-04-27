@@ -1,6 +1,90 @@
-## 0.3.11 (2026-04-21)
+## 0.8.0 (2026-04-24)
 
-## 0.3.10-rc.1 (2026-04-21)
+### Fix
+
+- **ci**: auto tag inf commits
+
+## 0.8.0-rc.18 (2026-04-24)
+
+### Fix
+
+- **ci**: prevent inf loop for release PRs
+
+## 0.8.0-rc.17 (2026-04-24)
+
+## 0.8.0-rc.16 (2026-04-24)
+
+## 0.8.0-rc.15 (2026-04-24)
+
+## 0.8.0-rc.14 (2026-04-24)
+
+### Fix
+
+- **ci**: auto tag infinite loop fix ATTEMPT TWO
+- **ci**: bad pipefails
+
+## 0.8.0-rc.13 (2026-04-24)
+
+### Fix
+
+- **ci**: auto tag infinite loop fix ATTEMPT
+
+## 0.8.0-rc.12 (2026-04-24)
+
+### Fix
+
+- **ci**: auto tag infinite loop fix
+
+## 0.8.0-rc.11 (2026-04-24)
+
+## 0.8.0-rc.10 (2026-04-24)
+
+## 0.8.0-rc.9 (2026-04-24)
+
+## 0.8.0-rc.8 (2026-04-24)
+
+## 0.8.0-rc.7 (2026-04-24)
+
+## 0.8.0-rc.6 (2026-04-24)
+
+## 0.8.0-rc.5 (2026-04-24)
+
+## 0.8.0-rc.4 (2026-04-24)
+
+## 0.8.0-rc.3 (2026-04-24)
+
+### Feat
+
+- sunny is sad coz well
+- **sunny**: testing bad straight commit
+
+### Fix
+
+- **ci**: fix helm ci to trigger on tag
+
+## 0.8.0-rc.2 (2026-04-24)
+
+## 0.8.0-rc.1 (2026-04-24)
+
+### Feat
+
+- sunny is sad coz
+- **ci**: auto label PRs
+- **ci**: new release management & versioning strategy
+
+### Fix
+
+- **ci-prebuild**: use correct chart version
+- **ci**: bad syntax and fix prebuild cleanup
+- **ci**: fail ci if base not latest
+- **ci**: need git name and email to commit
+- **ci**: need to prebuild helm correctly and not prebuild img on pyproject change
+- **ci**: prevent infinite ci loop :)
+- **ci**: detect image changes, chart changes and irrelevant changes
+
+## 0.3.11-rc.1 (2026-04-21)
+
+## 0.3.10 (2026-04-21)
 
 ### BREAKING CHANGE
 
