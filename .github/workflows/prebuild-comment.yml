@@ -1,0 +1,338 @@
+name: "[Prebuild] PR Artifact Comment"
+description: "Create or update the per-commit prebuild artifact PR comment"
+
+on:
+  repository_dispatch:
+    types: [prebuild-published]
+
+concurrency:
+  group: prebuild-comment-${{ github.event.client_payload.pr_number }}-${{ github.event.client_payload.head_sha }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+  packages: read
+  pull-requests: read
+
+jobs:
+  upsert-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Upsert prebuild artifact comment
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PREBUILD_PAYLOAD: ${{ toJson(github.event.client_payload) }}
+          OWNER: ${{ github.repository_owner }}
+          OWNER_TYPE: ${{ github.event.repository.owner.type }}
+        run: |
+          set -euo pipefail
+
+          WORK_DIR="$RUNNER_TEMP/prebuild-comment"
+          mkdir -p "$WORK_DIR"
+
+          PAYLOAD_FILE="$WORK_DIR/payload.json"
+          EXISTING_STATE_FILE="$WORK_DIR/existing-state.json"
+          EXISTING_ARTIFACTS_FILE="$WORK_DIR/existing-artifacts.json"
+          PAYLOAD_ARTIFACTS_FILE="$WORK_DIR/payload-artifacts.json"
+          DISCOVERED_ARTIFACTS_FILE="$WORK_DIR/discovered-artifacts.json"
+          ARTIFACTS_FILE="$WORK_DIR/artifacts.json"
+          STATE_FILE="$WORK_DIR/state.json"
+          COMMENT_FILE="$WORK_DIR/comment.md"
+          REQUEST_FILE="$WORK_DIR/request.json"
+
+          printf '%s' "$PREBUILD_PAYLOAD" > "$PAYLOAD_FILE"
+
+          PR_NUMBER=$(jq -r '.pr_number // empty' "$PAYLOAD_FILE")
+          HEAD_SHA=$(jq -r '.head_sha // empty' "$PAYLOAD_FILE")
+          HEAD_REF=$(jq -r '.head_ref // ""' "$PAYLOAD_FILE")
+          PREBUILD_TAG=$(jq -r '.prebuild_tag // ""' "$PAYLOAD_FILE")
+          CHART_SUFFIX=$(jq -r '.chart_suffix // ""' "$PAYLOAD_FILE")
+
+          if [[ -z "$PR_NUMBER" || -z "$HEAD_SHA" ]]; then
+            echo "prebuild-published payload must include pr_number and head_sha"
+            exit 1
+          fi
+
+          if [[ -z "$CHART_SUFFIX" ]]; then
+            COUNT=$(sed -n 's/.*-\([0-9][0-9]*\)$/\1/p' <<< "$PREBUILD_TAG")
+            CLEAN_BRANCH="${HEAD_REF#prebuild/}"
+            CLEAN_BRANCH="${CLEAN_BRANCH//\//-}"
+            CLEAN_BRANCH="${CLEAN_BRANCH//_/-}"
+            CLEAN_BRANCH=$(tr '[:upper:]' '[:lower:]' <<< "$CLEAN_BRANCH")
+            if [[ -n "$COUNT" ]]; then
+              CHART_SUFFIX="${CLEAN_BRANCH}-${COUNT}"
+            else
+              CHART_SUFFIX="$CLEAN_BRANCH"
+            fi
+          fi
+
+          MARKER="<!-- prebuild-artifacts pr=${PR_NUMBER} sha=${HEAD_SHA} -->"
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
+          jq '.artifacts // []' "$PAYLOAD_FILE" > "$PAYLOAD_ARTIFACTS_FILE"
+          jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
+
+          gh api --paginate --slurp \
+            "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments?per_page=100" \
+            > "$WORK_DIR/comments-pages.json"
+
+          COMMENT_ID=$(jq -r --arg marker "$MARKER" '
+            add
+            | map(select(.user.type == "Bot" and ((.body // "") | contains($marker))))
+            | .[0].id // empty
+          ' "$WORK_DIR/comments-pages.json")
+
+          jq -r --arg marker "$MARKER" '
+            add
+            | map(select(.user.type == "Bot" and ((.body // "") | contains($marker))))
+            | .[0].body // ""
+          ' "$WORK_DIR/comments-pages.json" > "$WORK_DIR/existing-comment.md"
+
+          DATA_MARKER=$(grep -o '<!-- prebuild-artifacts-data:[A-Za-z0-9+/=]* -->' "$WORK_DIR/existing-comment.md" \
+            | head -n1 \
+            | sed 's/^<!-- prebuild-artifacts-data://; s/ -->$//' || true)
+
+          if [[ -n "$DATA_MARKER" ]]; then
+            if ! printf '%s' "$DATA_MARKER" | base64 -d > "$EXISTING_STATE_FILE" 2>/dev/null; then
+              jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
+            fi
+          fi
+
+          jq '.artifacts // []' "$EXISTING_STATE_FILE" > "$EXISTING_ARTIFACTS_FILE"
+
+          package_versions() {
+            local package_name="$1"
+            local encoded_package
+            local owner_path
+
+            encoded_package=$(jq -rn --arg value "$package_name" '$value | @uri')
+            if [[ "$OWNER_TYPE" == "User" ]]; then
+              owner_path="/users/${OWNER}"
+            else
+              owner_path="/orgs/${OWNER}"
+            fi
+
+            gh api --paginate --slurp \
+              "${owner_path}/packages/container/${encoded_package}/versions?per_page=100" \
+              2> "$WORK_DIR/package.err" \
+              | jq 'add'
+          }
+
+          : > "$WORK_DIR/discovered.ndjson"
+
+          if [[ -n "$PREBUILD_TAG" ]]; then
+            jq -r --arg owner "$OWNER" '
+              [
+                ["Supervisor Agent", "prebuild/ai-platform-engineering"],
+                ["CAIPE UI", "prebuild/caipe-ui"],
+                ["Slack Bot", "prebuild/caipe-slack-bot"],
+                ["Dynamic Agents", "prebuild/caipe-dynamic-agents"]
+              ]
+              + ((.a2a_agents // []) | map(["A2A Agent: " + ., "prebuild/agent-" + .]))
+              + ((.mcp_agents // []) | map(["MCP Agent: " + ., "prebuild/mcp-" + .]))
+              + ((.rag_components // ["agent-ontology", "server", "ingestors"]) | map(["RAG: " + ., "prebuild/caipe-rag-" + .]))
+              | .[]
+              | [.[0], .[1], ("ghcr.io/" + $owner + "/" + .[1])]
+              | @tsv
+            ' .github/agents.json > "$WORK_DIR/image-definitions.tsv"
+
+            while IFS=$'\t' read -r name package_name repository; do
+              if package_versions "$package_name" > "$WORK_DIR/package-versions.json"; then
+                if jq -e --arg tag "$PREBUILD_TAG" '
+                  any(.[]?; ((.metadata.container.tags // []) | index($tag)))
+                ' "$WORK_DIR/package-versions.json" > /dev/null; then
+                  jq -n \
+                    --arg type "image" \
+                    --arg name "$name" \
+                    --arg repository "$repository" \
+                    --arg tag "$PREBUILD_TAG" \
+                    --arg ref "${repository}:${PREBUILD_TAG}" \
+                    --arg source "ghcr" \
+                    '{type: $type, name: $name, repository: $repository, tag: $tag, ref: $ref, source: $source}' \
+                    >> "$WORK_DIR/discovered.ndjson"
+                fi
+              elif ! grep -q "HTTP 404" "$WORK_DIR/package.err"; then
+                echo "Warning: failed to list package ${package_name}" >&2
+                cat "$WORK_DIR/package.err" >&2
+              fi
+            done < "$WORK_DIR/image-definitions.tsv"
+          fi
+
+          if [[ -n "$CHART_SUFFIX" ]]; then
+            {
+              printf 'rag-stack\tprebuild-helm-charts/rag-stack\trag\n'
+              printf 'ai-platform-engineering\tprebuild-helm-charts/ai-platform-engineering\tai-platform\n'
+            } > "$WORK_DIR/chart-definitions.tsv"
+
+            while IFS=$'\t' read -r chart package_name release_name; do
+              repository="ghcr.io/${OWNER}/prebuild-helm-charts/${chart}"
+              if package_versions "$package_name" > "$WORK_DIR/package-versions.json"; then
+                jq -r --arg suffix "-${CHART_SUFFIX}" '
+                  [.[]?.metadata.container.tags[]? | select(endswith($suffix))]
+                  | unique
+                  | .[]
+                ' "$WORK_DIR/package-versions.json" \
+                  | while IFS= read -r version; do
+                    jq -n \
+                      --arg type "helm-chart" \
+                      --arg name "$chart" \
+                      --arg repository "$repository" \
+                      --arg version "$version" \
+                      --arg releaseName "$release_name" \
+                      --arg source "ghcr" \
+                      '{type: $type, name: $name, repository: $repository, version: $version, releaseName: $releaseName, source: $source}' \
+                      >> "$WORK_DIR/discovered.ndjson"
+                  done
+              elif ! grep -q "HTTP 404" "$WORK_DIR/package.err"; then
+                echo "Warning: failed to list package ${package_name}" >&2
+                cat "$WORK_DIR/package.err" >&2
+              fi
+            done < "$WORK_DIR/chart-definitions.tsv"
+          fi
+
+          if [[ -s "$WORK_DIR/discovered.ndjson" ]]; then
+            jq -s '.' "$WORK_DIR/discovered.ndjson" > "$DISCOVERED_ARTIFACTS_FILE"
+          else
+            jq -n '[]' > "$DISCOVERED_ARTIFACTS_FILE"
+          fi
+
+          jq -s '
+            add
+            | map(select(type == "object"))
+            | map({
+                type: (if .type == "helm-chart" then "helm-chart" else "image" end),
+                name: ((.name // .component // .agent // "") | tostring),
+                repository: ((.repository // .image_repo // "") | tostring),
+                tag: ((.tag // .prebuild_tag // "") | tostring),
+                version: ((.version // "") | tostring),
+                ref: ((.ref // .image_ref // "") | tostring),
+                releaseName: ((.releaseName // .release_name // "") | tostring),
+                workflow: ((.workflow // "") | tostring),
+                runId: ((.run_id // .runId // "") | tostring),
+                source: ((.source // "payload") | tostring)
+              })
+            | map(select(.name != "" and .repository != ""))
+            | map(.ref = (if .type == "image" and .ref == "" and .tag != "" then "\(.repository):\(.tag)" else .ref end))
+            | map(select((.type != "image" or .tag != "" or .ref != "") and (.type != "helm-chart" or .version != "")))
+            | unique_by([
+                .type,
+                (.name | ascii_downcase),
+                (.repository | ascii_downcase),
+                (if .type == "helm-chart" then .version else .tag end | ascii_downcase)
+              ])
+            | sort_by((.type == "helm-chart"), .name)
+          ' "$EXISTING_ARTIFACTS_FILE" "$PAYLOAD_ARTIFACTS_FILE" "$DISCOVERED_ARTIFACTS_FILE" > "$ARTIFACTS_FILE"
+
+          jq -n \
+            --slurpfile artifacts "$ARTIFACTS_FILE" \
+            --argjson pr_number "$PR_NUMBER" \
+            --arg head_sha "$HEAD_SHA" \
+            --arg head_ref "$HEAD_REF" \
+            --arg prebuild_tag "$PREBUILD_TAG" \
+            --arg chart_suffix "$CHART_SUFFIX" \
+            --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+            '{
+              version: 1,
+              pr_number: $pr_number,
+              head_sha: $head_sha,
+              head_ref: $head_ref,
+              prebuild_tag: $prebuild_tag,
+              chart_suffix: $chart_suffix,
+              updated_at: $updated_at,
+              artifacts: $artifacts[0]
+            }' > "$STATE_FILE"
+
+          STATE_DATA=$(base64 -w0 < "$STATE_FILE")
+
+          escape_table() {
+            sed 's/|/\\|/g' <<< "$1"
+          }
+
+          {
+            echo "$MARKER"
+            echo "<!-- prebuild-artifacts-data:${STATE_DATA} -->"
+            echo "## Prebuild Artifacts for \`${SHORT_SHA}\`"
+            echo
+            echo "**Branch:** \`${HEAD_REF}\`"
+            echo "**Commit:** \`${SHORT_SHA}\`"
+            echo
+
+            IMAGE_COUNT=$(jq '[.[] | select(.type == "image")] | length' "$ARTIFACTS_FILE")
+            CHART_COUNT=$(jq '[.[] | select(.type == "helm-chart")] | length' "$ARTIFACTS_FILE")
+
+            if [[ "$IMAGE_COUNT" -gt 0 ]]; then
+              echo "### Docker Images"
+              echo
+              echo "| Artifact | Image | Tag |"
+              echo "| --- | --- | --- |"
+              jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
+                | while IFS= read -r artifact; do
+                  NAME=$(jq -r '.name' <<< "$artifact")
+                  REPOSITORY=$(jq -r '.repository' <<< "$artifact")
+                  TAG=$(jq -r '.tag' <<< "$artifact")
+                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$TAG")\` |"
+                done
+              echo
+              echo "<details>"
+              echo "<summary>Docker pull commands</summary>"
+              echo
+              echo '```bash'
+              jq -r '.[] | select(.type == "image") | "docker pull \(.ref)"' "$ARTIFACTS_FILE"
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            fi
+
+            if [[ "$CHART_COUNT" -gt 0 ]]; then
+              echo "### Helm Charts"
+              echo
+              echo "| Chart | Registry | Version |"
+              echo "| --- | --- | --- |"
+              jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
+                | while IFS= read -r artifact; do
+                  NAME=$(jq -r '.name' <<< "$artifact")
+                  REPOSITORY=$(jq -r '.repository' <<< "$artifact")
+                  VERSION=$(jq -r '.version' <<< "$artifact")
+                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$VERSION")\` |"
+                done
+              echo
+              echo "<details>"
+              echo "<summary>Helm install commands</summary>"
+              echo
+              echo '```bash'
+              jq -r '.[] | select(.type == "helm-chart") | "helm upgrade --install \(.releaseName // .name) oci://\(.repository) --version \(.version)"' "$ARTIFACTS_FILE"
+              echo '```'
+              echo
+              echo "</details>"
+              echo
+            fi
+
+            if [[ "$IMAGE_COUNT" -eq 0 && "$CHART_COUNT" -eq 0 ]]; then
+              echo "No published prebuild artifacts have been detected yet."
+              echo
+            fi
+
+            echo "> These prebuild artifacts will be automatically cleaned up when the PR is closed or merged."
+          } > "$COMMENT_FILE"
+
+          jq -n --rawfile body "$COMMENT_FILE" '{body: $body}' > "$REQUEST_FILE"
+
+          if [[ -n "$COMMENT_ID" ]]; then
+            gh api \
+              --method PATCH \
+              "/repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
+              --input "$REQUEST_FILE"
+            echo "Updated prebuild artifact comment ${COMMENT_ID}"
+          else
+            gh api \
+              --method POST \
+              "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
+              --input "$REQUEST_FILE"
+            echo "Created prebuild artifact comment"
+          fi

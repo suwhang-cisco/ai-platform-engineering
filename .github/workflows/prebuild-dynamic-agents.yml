@@ -22,7 +22,7 @@ jobs:
       startsWith(github.head_ref, 'prebuild/') &&
       github.event.action != 'closed'
     permissions:
-      contents: read
+      contents: write  # Required for repository_dispatch
       packages: write
       pull-requests: write
 
@@ -82,41 +82,45 @@ jobs:
           provenance: false
           sbom: false
 
-      - name: 💬 Comment on PR
+      - name: Notify prebuild artifact comment
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        shell: bash
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           IMAGE_REPO: ghcr.io/${{ env.IMAGE_NAME }}
-          IMAGE_REF: ghcr.io/${{ env.IMAGE_NAME }}:${{ env.PREBUILD_TAG }}
-          PREBUILD_TAG: ${{ env.PREBUILD_TAG }}
-        with:
-          script: |
-            const body = `## 🐳 Prebuild Dynamic Agents Docker Image Published
+        run: |
+          IMAGE_REF="${IMAGE_REPO}:${PREBUILD_TAG}"
+          jq -n \
+            --argjson pr_number "${{ github.event.pull_request.number }}" \
+            --arg head_sha "${{ github.event.pull_request.head.sha }}" \
+            --arg head_ref "${{ github.event.pull_request.head.ref }}" \
+            --arg prebuild_tag "$PREBUILD_TAG" \
+            --arg workflow "$GITHUB_WORKFLOW" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg image_repo "$IMAGE_REPO" \
+            --arg image_ref "$IMAGE_REF" \
+            '{
+              event_type: "prebuild-published",
+              client_payload: {
+                pr_number: $pr_number,
+                head_sha: $head_sha,
+                head_ref: $head_ref,
+                prebuild_tag: $prebuild_tag,
+                workflow: $workflow,
+                run_id: $run_id,
+                artifacts: [{
+                  type: "image",
+                  name: "Dynamic Agents",
+                  repository: $image_repo,
+                  tag: $prebuild_tag,
+                  ref: $image_ref,
+                  workflow: $workflow,
+                  run_id: $run_id
+                }]
+              }
+            }' > prebuild-published.json
 
-            **Repository:** \`${process.env.IMAGE_REPO}\`
-            **Tag:** \`${process.env.PREBUILD_TAG}\`
-
-            ### Usage
-            \`\`\`bash
-            docker pull ${process.env.IMAGE_REF}
-            \`\`\`
-
-            ### Test in Helm values
-            \`\`\`yaml
-            dynamic-agents:
-              image:
-                repository: ${process.env.IMAGE_REPO}
-                tag: "${process.env.PREBUILD_TAG}"
-            \`\`\`
-
-            > **Note:** This prebuild image will be automatically cleaned up when the PR is closed or merged.`;
-
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body
-            });
+          gh api /repos/${{ github.repository }}/dispatches --input prebuild-published.json
 
   cleanup-images:
     runs-on: ubuntu-latest
