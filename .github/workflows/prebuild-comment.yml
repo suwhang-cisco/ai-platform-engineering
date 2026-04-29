@@ -53,26 +53,22 @@ jobs:
           PREBUILD_TAG=$(jq -r '.prebuild_tag // ""' "$PAYLOAD_FILE")
           CHART_SUFFIX=$(jq -r '.chart_suffix // ""' "$PAYLOAD_FILE")
 
+          SHORT_SHA="${HEAD_SHA:0:7}"
+
           if [[ -z "$PR_NUMBER" || -z "$HEAD_SHA" ]]; then
             echo "prebuild-published payload must include pr_number and head_sha"
             exit 1
           fi
 
           if [[ -z "$CHART_SUFFIX" ]]; then
-            COUNT=$(sed -n 's/.*-\([0-9][0-9]*\)$/\1/p' <<< "$PREBUILD_TAG")
             CLEAN_BRANCH="${HEAD_REF#prebuild/}"
             CLEAN_BRANCH="${CLEAN_BRANCH//\//-}"
             CLEAN_BRANCH="${CLEAN_BRANCH//_/-}"
             CLEAN_BRANCH=$(tr '[:upper:]' '[:lower:]' <<< "$CLEAN_BRANCH")
-            if [[ -n "$COUNT" ]]; then
-              CHART_SUFFIX="${CLEAN_BRANCH}-${COUNT}"
-            else
-              CHART_SUFFIX="$CLEAN_BRANCH"
-            fi
+            CHART_SUFFIX="${CLEAN_BRANCH}-${SHORT_SHA}"
           fi
 
           MARKER="<!-- prebuild-artifacts pr=${PR_NUMBER} sha=${HEAD_SHA} -->"
-          SHORT_SHA="${HEAD_SHA:0:7}"
 
           jq '.artifacts // []' "$PAYLOAD_FILE" > "$PAYLOAD_ARTIFACTS_FILE"
           jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
