@@ -134,18 +134,12 @@ jobs:
 
           jq -n \
             --argjson agents "$AGENTS" \
-            --arg registry "$REGISTRY" \
-            --arg owner "${{ github.repository_owner }}" \
-            --arg prebuild_tag "$PREBUILD_TAG" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_url "$RUN_URL" \
             '$agents | map({
               type: "image",
               name: ("A2A Agent: " + .),
-              repository: ($registry + "/" + $owner + "/prebuild/agent-" + .),
-              tag: $prebuild_tag,
-              ref: ($registry + "/" + $owner + "/prebuild/agent-" + . + ":" + $prebuild_tag),
               status: "building",
               workflow: $workflow,
               run_id: $run_id,
