@@ -74,10 +74,11 @@ jobs:
           BRANCH="${{ github.head_ref || github.ref_name }}"
           BRANCH_NO_PREFIX="${BRANCH#prebuild/}"
           BRANCH_SANITIZED="${BRANCH_NO_PREFIX//\//-}"
-          git fetch origin ${{ github.event.pull_request.base.ref }}
-          COMMIT_COUNT=$(git rev-list --count origin/${{ github.event.pull_request.base.ref }}..HEAD)
+          SHORT_SHA="${{ github.event.pull_request.head.sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
           echo "BRANCH_BARE=${BRANCH_SANITIZED}" >> $GITHUB_ENV
-          echo "PREBUILD_TAG=${BRANCH_SANITIZED}-${COMMIT_COUNT}" >> $GITHUB_ENV
+          echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
+          echo "PREBUILD_TAG=${BRANCH_SANITIZED}-${SHORT_SHA}" >> $GITHUB_ENV
 
       - name: Extract metadata for Docker
         id: meta

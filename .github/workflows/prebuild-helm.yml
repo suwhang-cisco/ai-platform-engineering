@@ -223,20 +223,20 @@ jobs:
         if: steps.version-check.outputs.skip != 'true'
         id: version
         run: |
-          BASE_COMMIT="${{ steps.base.outputs.base_commit }}"
-
           # Get branch name and remove 'prebuild/' prefix if present
           BRANCH_NAME="${{ steps.pr-info.outputs.head_ref }}"
           CLEAN_BRANCH=$(echo "${BRANCH_NAME#prebuild/}" | tr '/' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
           IMAGE_BRANCH="${BRANCH_NAME#prebuild/}"
           IMAGE_BRANCH="${IMAGE_BRANCH//\//-}"
+          SHORT_SHA="${{ steps.pr-info.outputs.head_sha }}"
+          SHORT_SHA="${SHORT_SHA:0:7}"
 
-          # Get commit count for this PR
-          COMMIT_COUNT=$(git rev-list --count "$BASE_COMMIT"..HEAD)
+          CHART_SUFFIX="${CLEAN_BRANCH}-${SHORT_SHA}"
 
           echo "clean-branch=$CLEAN_BRANCH" >> $GITHUB_OUTPUT
-          echo "commit-count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
-          echo "image-prebuild-tag=${IMAGE_BRANCH}-${COMMIT_COUNT}" >> $GITHUB_OUTPUT
+          echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
+          echo "chart-suffix=$CHART_SUFFIX" >> $GITHUB_OUTPUT
+          echo "image-prebuild-tag=${IMAGE_BRANCH}-${SHORT_SHA}" >> $GITHUB_OUTPUT
 
           make_prebuild_version() {
             local chart_file="$1"
@@ -248,7 +248,7 @@ jobs:
               exit 1
             fi
 
-            echo "${current_version}-${CLEAN_BRANCH}-${COMMIT_COUNT}"
+            echo "${current_version}-${CHART_SUFFIX}"
           }
 
           # Generate version for rag-stack if changed
@@ -403,7 +403,7 @@ jobs:
             --arg head_sha "${{ steps.pr-info.outputs.head_sha }}" \
             --arg head_ref "${{ steps.pr-info.outputs.head_ref }}" \
             --arg prebuild_tag "${{ steps.version.outputs.image-prebuild-tag }}" \
-            --arg chart_suffix "${{ steps.version.outputs.clean-branch }}-${{ steps.version.outputs.commit-count }}" \
+            --arg chart_suffix "${{ steps.version.outputs.chart-suffix }}" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
             '{
