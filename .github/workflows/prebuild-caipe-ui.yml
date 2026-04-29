@@ -80,6 +80,50 @@ jobs:
           echo "SHORT_SHA=${SHORT_SHA}" >> $GITHUB_ENV
           echo "PREBUILD_TAG=${BRANCH_SANITIZED}-${SHORT_SHA}" >> $GITHUB_ENV
 
+      - name: Notify prebuild artifact comment started
+        if: github.event_name == 'pull_request'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          IMAGE_REPO: ghcr.io/${{ env.IMAGE_NAME }}
+        run: |
+          IMAGE_REF="${IMAGE_REPO}:${PREBUILD_TAG}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
+          jq -n \
+            --argjson pr_number "${{ github.event.pull_request.number }}" \
+            --arg head_sha "${{ github.event.pull_request.head.sha }}" \
+            --arg head_ref "${{ github.event.pull_request.head.ref }}" \
+            --arg prebuild_tag "$PREBUILD_TAG" \
+            --arg workflow "$GITHUB_WORKFLOW" \
+            --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
+            --arg image_repo "$IMAGE_REPO" \
+            --arg image_ref "$IMAGE_REF" \
+            '{
+              event_type: "prebuild-published",
+              client_payload: {
+                pr_number: $pr_number,
+                head_sha: $head_sha,
+                head_ref: $head_ref,
+                prebuild_tag: $prebuild_tag,
+                workflow: $workflow,
+                run_id: $run_id,
+                artifacts: [{
+                  type: "image",
+                  name: "CAIPE UI",
+                  repository: $image_repo,
+                  tag: $prebuild_tag,
+                  ref: $image_ref,
+                  status: "building",
+                  workflow: $workflow,
+                  run_id: $run_id,
+                  run_url: $run_url
+                }]
+              }
+            }' > prebuild-started.json
+
+          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-started.json || true
+
       - name: Extract metadata for Docker
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
@@ -118,6 +162,7 @@ jobs:
           IMAGE_REPO: ghcr.io/${{ env.IMAGE_NAME }}
         run: |
           IMAGE_REF="${IMAGE_REPO}:${PREBUILD_TAG}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
           jq -n \
             --argjson pr_number "${{ github.event.pull_request.number }}" \
             --arg head_sha "${{ github.event.pull_request.head.sha }}" \
@@ -125,6 +170,7 @@ jobs:
             --arg prebuild_tag "$PREBUILD_TAG" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
             --arg image_repo "$IMAGE_REPO" \
             --arg image_ref "$IMAGE_REF" \
             '{
@@ -142,8 +188,10 @@ jobs:
                   repository: $image_repo,
                   tag: $prebuild_tag,
                   ref: $image_ref,
+                  status: "published",
                   workflow: $workflow,
-                  run_id: $run_id
+                  run_id: $run_id,
+                  run_url: $run_url
                 }]
               }
             }' > prebuild-published.json

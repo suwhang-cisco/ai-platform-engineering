@@ -6,7 +6,7 @@ on:
     types: [prebuild-published]
 
 concurrency:
-  group: prebuild-comment-${{ github.event.client_payload.pr_number }}-${{ github.event.client_payload.head_sha }}
+  group: prebuild-comment-${{ github.event.client_payload.pr_number }}
   cancel-in-progress: false
 
 permissions:
@@ -69,6 +69,13 @@ jobs:
           fi
 
           MARKER="<!-- prebuild-artifacts pr=${PR_NUMBER} sha=${HEAD_SHA} -->"
+          MARKER_PREFIX="<!-- prebuild-artifacts pr=${PR_NUMBER} sha="
+
+          CURRENT_HEAD_SHA=$(gh api "/repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || echo "$HEAD_SHA")
+          IS_CURRENT_HEAD=false
+          if [[ "$HEAD_SHA" == "$CURRENT_HEAD_SHA" ]]; then
+            IS_CURRENT_HEAD=true
+          fi
 
           jq '.artifacts // []' "$PAYLOAD_FILE" > "$PAYLOAD_ARTIFACTS_FILE"
           jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
@@ -197,7 +204,23 @@ jobs:
             jq -n '[]' > "$DISCOVERED_ARTIFACTS_FILE"
           fi
 
-          jq -s '
+          jq -s --arg repo "${{ github.repository }}" '
+            def normalized_status:
+              (.status // (if .source == "ghcr" then "published" else "published" end) | tostring | ascii_downcase) as $status
+              | if ["building", "in_progress", "pending", "queued"] | index($status) then "building"
+                elif ["failed", "failure", "cancelled", "canceled"] | index($status) then "failed"
+                else "published"
+                end;
+
+            def status_rank:
+              if .status == "published" then 2
+              elif .status == "failed" then 1
+              else 0
+              end;
+
+            def source_rank:
+              if .source == "payload" then 1 else 0 end;
+
             add
             | map(select(type == "object"))
             | map({
@@ -208,19 +231,29 @@ jobs:
                 version: ((.version // "") | tostring),
                 ref: ((.ref // .image_ref // "") | tostring),
                 releaseName: ((.releaseName // .release_name // "") | tostring),
+                status: normalized_status,
                 workflow: ((.workflow // "") | tostring),
                 runId: ((.run_id // .runId // "") | tostring),
+                runUrl: ((.run_url // .runUrl // "") | tostring),
                 source: ((.source // "payload") | tostring)
               })
             | map(select(.name != "" and .repository != ""))
             | map(.ref = (if .type == "image" and .ref == "" and .tag != "" then "\(.repository):\(.tag)" else .ref end))
+            | map(.runUrl = (if .runUrl == "" and .runId != "" then "https://github.com/\($repo)/actions/runs/\(.runId)" else .runUrl end))
             | map(select((.type != "image" or .tag != "" or .ref != "") and (.type != "helm-chart" or .version != "")))
-            | unique_by([
+            | sort_by([
                 .type,
                 (.name | ascii_downcase),
                 (.repository | ascii_downcase),
                 (if .type == "helm-chart" then .version else .tag end | ascii_downcase)
               ])
+            | group_by([
+                .type,
+                (.name | ascii_downcase),
+                (.repository | ascii_downcase),
+                (if .type == "helm-chart" then .version else .tag end | ascii_downcase)
+              ])
+            | map(max_by([status_rank, source_rank]))
             | sort_by((.type == "helm-chart"), .name)
           ' "$EXISTING_ARTIFACTS_FILE" "$PAYLOAD_ARTIFACTS_FILE" "$DISCOVERED_ARTIFACTS_FILE" > "$ARTIFACTS_FILE"
 
@@ -249,6 +282,47 @@ jobs:
             sed 's/|/\\|/g' <<< "$1"
           }
 
+          collapse_comment_file() {
+            local source_file="$1"
+            local target_file="$2"
+            local comment_sha="$3"
+
+            local marker_line
+            local data_line
+            local short_comment_sha
+            marker_line=$(grep -m1 '^<!-- prebuild-artifacts pr=' "$source_file" || true)
+            data_line=$(grep -m1 '^<!-- prebuild-artifacts-data:' "$source_file" || true)
+            short_comment_sha="${comment_sha:0:7}"
+
+            {
+              [[ -n "$marker_line" ]] && echo "$marker_line"
+              [[ -n "$data_line" ]] && echo "$data_line"
+              echo "<details>"
+              echo "<summary>Prebuild Artifacts for \`${short_comment_sha}\` (archived)</summary>"
+              echo
+              grep -v -E '^<!-- prebuild-artifacts pr=|^<!-- prebuild-artifacts-data:' "$source_file" || true
+              echo
+              echo "</details>"
+            } > "$target_file"
+          }
+
+          status_label() {
+            case "$1" in
+              building) printf 'Build in process' ;;
+              failed) printf 'Failed' ;;
+              *) printf 'Published' ;;
+            esac
+          }
+
+          ci_link() {
+            local run_url="$1"
+            if [[ -n "$run_url" ]]; then
+              printf '[CI](%s)' "$run_url"
+            else
+              printf '-'
+            fi
+          }
+
           {
             echo "$MARKER"
             echo "<!-- prebuild-artifacts-data:${STATE_DATA} -->"
@@ -264,48 +338,60 @@ jobs:
             if [[ "$IMAGE_COUNT" -gt 0 ]]; then
               echo "### Docker Images"
               echo
-              echo "| Artifact | Image | Tag |"
-              echo "| --- | --- | --- |"
+              echo "| Artifact | Image | Tag | Status | CI |"
+              echo "| --- | --- | --- | --- | --- |"
               jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
                 | while IFS= read -r artifact; do
                   NAME=$(jq -r '.name' <<< "$artifact")
                   REPOSITORY=$(jq -r '.repository' <<< "$artifact")
                   TAG=$(jq -r '.tag' <<< "$artifact")
-                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$TAG")\` |"
+                  STATUS=$(jq -r '.status' <<< "$artifact")
+                  RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$TAG")\` | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
                 done
               echo
-              echo "<details>"
-              echo "<summary>Docker pull commands</summary>"
-              echo
-              echo '```bash'
-              jq -r '.[] | select(.type == "image") | "docker pull \(.ref)"' "$ARTIFACTS_FILE"
-              echo '```'
-              echo
-              echo "</details>"
-              echo
+
+              IMAGE_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "image" and .status == "published")] | length' "$ARTIFACTS_FILE")
+              if [[ "$IMAGE_PUBLISHED_COUNT" -gt 0 ]]; then
+                echo "<details>"
+                echo "<summary>Docker pull commands</summary>"
+                echo
+                echo '```bash'
+                jq -r '.[] | select(.type == "image" and .status == "published") | "docker pull \(.ref)"' "$ARTIFACTS_FILE"
+                echo '```'
+                echo
+                echo "</details>"
+                echo
+              fi
             fi
 
             if [[ "$CHART_COUNT" -gt 0 ]]; then
               echo "### Helm Charts"
               echo
-              echo "| Chart | Registry | Version |"
-              echo "| --- | --- | --- |"
+              echo "| Chart | Registry | Version | Status | CI |"
+              echo "| --- | --- | --- | --- | --- |"
               jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
                 | while IFS= read -r artifact; do
                   NAME=$(jq -r '.name' <<< "$artifact")
                   REPOSITORY=$(jq -r '.repository' <<< "$artifact")
                   VERSION=$(jq -r '.version' <<< "$artifact")
-                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$VERSION")\` |"
+                  STATUS=$(jq -r '.status' <<< "$artifact")
+                  RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$VERSION")\` | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
                 done
               echo
-              echo "<details>"
-              echo "<summary>Helm install commands</summary>"
-              echo
-              echo '```bash'
-              jq -r '.[] | select(.type == "helm-chart") | "helm upgrade --install \(.releaseName // .name) oci://\(.repository) --version \(.version)"' "$ARTIFACTS_FILE"
-              echo '```'
-              echo
-              echo "</details>"
+
+              CHART_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "helm-chart" and .status == "published")] | length' "$ARTIFACTS_FILE")
+              if [[ "$CHART_PUBLISHED_COUNT" -gt 0 ]]; then
+                echo "<details>"
+                echo "<summary>Helm install commands</summary>"
+                echo
+                echo '```bash'
+                jq -r '.[] | select(.type == "helm-chart" and .status == "published") | "helm upgrade --install \(.releaseName // .name) oci://\(.repository) --version \(.version)"' "$ARTIFACTS_FILE"
+                echo '```'
+                echo
+                echo "</details>"
+              fi
               echo
             fi
 
@@ -316,6 +402,11 @@ jobs:
 
             echo "> These prebuild artifacts will be automatically cleaned up when the PR is closed or merged."
           } > "$COMMENT_FILE"
+
+          if [[ "$IS_CURRENT_HEAD" != "true" ]]; then
+            collapse_comment_file "$COMMENT_FILE" "$WORK_DIR/comment-collapsed.md" "$HEAD_SHA"
+            mv "$WORK_DIR/comment-collapsed.md" "$COMMENT_FILE"
+          fi
 
           jq -n --rawfile body "$COMMENT_FILE" '{body: $body}' > "$REQUEST_FILE"
 
@@ -331,4 +422,41 @@ jobs:
               "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
               --input "$REQUEST_FILE"
             echo "Created prebuild artifact comment"
+          fi
+
+          if [[ "$IS_CURRENT_HEAD" == "true" ]]; then
+            jq -r --arg marker_prefix "$MARKER_PREFIX" --arg marker "$MARKER" '
+              add
+              | map(select(
+                  .user.type == "Bot"
+                  and ((.body // "") | contains($marker_prefix))
+                  and (((.body // "") | contains($marker)) | not)
+                ))
+              | .[]
+              | [
+                  .id,
+                  (((.body // "") | capture("<!-- prebuild-artifacts pr=[0-9]+ sha=(?<sha>[^ ]+) -->").sha) // ""),
+                  ((.body // "") | @base64)
+                ]
+              | @tsv
+            ' "$WORK_DIR/comments-pages.json" > "$WORK_DIR/archive-comments.tsv"
+
+            while IFS=$'\t' read -r old_comment_id old_head_sha old_body_b64; do
+              if [[ -z "$old_comment_id" || -z "$old_head_sha" || -z "$old_body_b64" ]]; then
+                continue
+              fi
+
+              printf '%s' "$old_body_b64" | base64 -d > "$WORK_DIR/old-comment.md" || continue
+              if grep -q '<summary>Prebuild Artifacts for `.*` (archived)</summary>' "$WORK_DIR/old-comment.md"; then
+                continue
+              fi
+
+              collapse_comment_file "$WORK_DIR/old-comment.md" "$WORK_DIR/old-comment-collapsed.md" "$old_head_sha"
+              jq -n --rawfile body "$WORK_DIR/old-comment-collapsed.md" '{body: $body}' > "$WORK_DIR/archive-request.json"
+              gh api \
+                --method PATCH \
+                "/repos/${{ github.repository }}/issues/comments/${old_comment_id}" \
+                --input "$WORK_DIR/archive-request.json"
+              echo "Archived older prebuild artifact comment ${old_comment_id}"
+            done < "$WORK_DIR/archive-comments.tsv"
           fi
