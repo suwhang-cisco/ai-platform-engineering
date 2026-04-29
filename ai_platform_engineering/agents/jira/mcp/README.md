@@ -1,4 +1,5 @@
 # 🧠 Jira MCP Server
+# SUNNY
 
 ## Setup MCP Server in Streamable HTTP Mode
 - Setup UV
