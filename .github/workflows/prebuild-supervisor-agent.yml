@@ -93,9 +93,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          IMAGE_REPO: ghcr.io/${{ env.IMAGE_NAME }}
         run: |
-          IMAGE_REF="${IMAGE_REPO}:${PREBUILD_TAG}"
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
           jq -n \
             --argjson pr_number "${{ github.event.pull_request.number }}" \
@@ -105,8 +103,6 @@ jobs:
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_url "$RUN_URL" \
-            --arg image_repo "$IMAGE_REPO" \
-            --arg image_ref "$IMAGE_REF" \
             '{
               event_type: "prebuild-published",
               client_payload: {
@@ -119,9 +115,6 @@ jobs:
                 artifacts: [{
                   type: "image",
                   name: "Supervisor Agent",
-                  repository: $image_repo,
-                  tag: $prebuild_tag,
-                  ref: $image_ref,
                   status: "building",
                   workflow: $workflow,
                   run_id: $run_id,

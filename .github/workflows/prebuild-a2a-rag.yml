@@ -98,18 +98,12 @@ jobs:
 
           jq -n \
             --argjson components "$COMPONENTS" \
-            --arg registry "$REGISTRY" \
-            --arg owner "${{ github.repository_owner }}" \
-            --arg prebuild_tag "$PREBUILD_TAG" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
             --arg run_url "$RUN_URL" \
             '$components | map({
               type: "image",
               name: ("RAG: " + .),
-              repository: ($registry + "/" + $owner + "/prebuild/caipe-rag-" + .),
-              tag: $prebuild_tag,
-              ref: ($registry + "/" + $owner + "/prebuild/caipe-rag-" + . + ":" + $prebuild_tag),
               status: "building",
               workflow: $workflow,
               run_id: $run_id,

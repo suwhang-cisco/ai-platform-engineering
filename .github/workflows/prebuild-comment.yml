@@ -221,6 +221,14 @@ jobs:
             def source_rank:
               if .source == "payload" then 1 else 0 end;
 
+            def filled($items; $field):
+              (($items | map(select((.[$field] // "") != "") | .[$field]) | last) // "");
+
+            def preferred_run_value($items; $field):
+              (($items | map(select(.source == "payload" and ((.[$field] // "") != "")) | .[$field]) | last)
+                // ($items | map(select((.[$field] // "") != "") | .[$field]) | last)
+                // "");
+
             add
             | map(select(type == "object"))
             | map({
@@ -237,23 +245,35 @@ jobs:
                 runUrl: ((.run_url // .runUrl // "") | tostring),
                 source: ((.source // "payload") | tostring)
               })
-            | map(select(.name != "" and .repository != ""))
-            | map(.ref = (if .type == "image" and .ref == "" and .tag != "" then "\(.repository):\(.tag)" else .ref end))
+            | map(select(.name != ""))
+            | map(.ref = (if .type == "image" and .ref == "" and .repository != "" and .tag != "" then "\(.repository):\(.tag)" else .ref end))
             | map(.runUrl = (if .runUrl == "" and .runId != "" then "https://github.com/\($repo)/actions/runs/\(.runId)" else .runUrl end))
-            | map(select((.type != "image" or .tag != "" or .ref != "") and (.type != "helm-chart" or .version != "")))
+            | map(select(
+                .status == "building"
+                or (.type == "image" and (.tag != "" or .ref != ""))
+                or (.type == "helm-chart" and .version != "")
+              ))
             | sort_by([
-                .type,
-                (.name | ascii_downcase),
-                (.repository | ascii_downcase),
-                (if .type == "helm-chart" then .version else .tag end | ascii_downcase)
+              .type,
+                (.name | ascii_downcase)
               ])
             | group_by([
-                .type,
-                (.name | ascii_downcase),
-                (.repository | ascii_downcase),
-                (if .type == "helm-chart" then .version else .tag end | ascii_downcase)
+              .type,
+                (.name | ascii_downcase)
               ])
-            | map(max_by([status_rank, source_rank]))
+            | map(
+                sort_by([status_rank, source_rank]) as $items
+                | ($items | last) as $best
+                | $best
+                | .repository = filled($items; "repository")
+                | .tag = filled($items; "tag")
+                | .version = filled($items; "version")
+                | .ref = filled($items; "ref")
+                | .releaseName = filled($items; "releaseName")
+                | .workflow = preferred_run_value($items; "workflow")
+                | .runId = preferred_run_value($items; "runId")
+                | .runUrl = preferred_run_value($items; "runUrl")
+              )
             | sort_by((.type == "helm-chart"), .name)
           ' "$EXISTING_ARTIFACTS_FILE" "$PAYLOAD_ARTIFACTS_FILE" "$DISCOVERED_ARTIFACTS_FILE" > "$ARTIFACTS_FILE"
 
@@ -338,20 +358,41 @@ jobs:
             if [[ "$IMAGE_COUNT" -gt 0 ]]; then
               echo "### Docker Images"
               echo
-              echo "| Artifact | Image | Tag | Status | CI |"
-              echo "| --- | --- | --- | --- | --- |"
-              jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
-                | while IFS= read -r artifact; do
-                  NAME=$(jq -r '.name' <<< "$artifact")
-                  REPOSITORY=$(jq -r '.repository' <<< "$artifact")
-                  TAG=$(jq -r '.tag' <<< "$artifact")
-                  STATUS=$(jq -r '.status' <<< "$artifact")
-                  RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$TAG")\` | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                done
-              echo
-
               IMAGE_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "image" and .status == "published")] | length' "$ARTIFACTS_FILE")
+              if [[ "$IMAGE_PUBLISHED_COUNT" -gt 0 ]]; then
+                echo "| Artifact | Image | Tag | Status | CI |"
+                echo "| --- | --- | --- | --- | --- |"
+                jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
+                  | while IFS= read -r artifact; do
+                    NAME=$(jq -r '.name' <<< "$artifact")
+                    REPOSITORY=$(jq -r '.repository' <<< "$artifact")
+                    TAG=$(jq -r '.tag' <<< "$artifact")
+                    STATUS=$(jq -r '.status' <<< "$artifact")
+                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                    IMAGE_CELL="-"
+                    TAG_CELL="-"
+                    if [[ -n "$REPOSITORY" ]]; then
+                      IMAGE_CELL="\`$(escape_table "$REPOSITORY")\`"
+                    fi
+                    if [[ -n "$TAG" ]]; then
+                      TAG_CELL="\`$(escape_table "$TAG")\`"
+                    fi
+                    echo "| $(escape_table "$NAME") | ${IMAGE_CELL} | ${TAG_CELL} | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
+                  done
+                echo
+              else
+                echo "| Artifact | Status | CI |"
+                echo "| --- | --- | --- |"
+                jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
+                  | while IFS= read -r artifact; do
+                    NAME=$(jq -r '.name' <<< "$artifact")
+                    STATUS=$(jq -r '.status' <<< "$artifact")
+                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                    echo "| $(escape_table "$NAME") | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
+                  done
+                echo
+              fi
+
               if [[ "$IMAGE_PUBLISHED_COUNT" -gt 0 ]]; then
                 echo "<details>"
                 echo "<summary>Docker pull commands</summary>"
@@ -368,20 +409,41 @@ jobs:
             if [[ "$CHART_COUNT" -gt 0 ]]; then
               echo "### Helm Charts"
               echo
-              echo "| Chart | Registry | Version | Status | CI |"
-              echo "| --- | --- | --- | --- | --- |"
-              jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
-                | while IFS= read -r artifact; do
-                  NAME=$(jq -r '.name' <<< "$artifact")
-                  REPOSITORY=$(jq -r '.repository' <<< "$artifact")
-                  VERSION=$(jq -r '.version' <<< "$artifact")
-                  STATUS=$(jq -r '.status' <<< "$artifact")
-                  RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                  echo "| $(escape_table "$NAME") | \`$(escape_table "$REPOSITORY")\` | \`$(escape_table "$VERSION")\` | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                done
-              echo
-
               CHART_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "helm-chart" and .status == "published")] | length' "$ARTIFACTS_FILE")
+              if [[ "$CHART_PUBLISHED_COUNT" -gt 0 ]]; then
+                echo "| Chart | Registry | Version | Status | CI |"
+                echo "| --- | --- | --- | --- | --- |"
+                jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
+                  | while IFS= read -r artifact; do
+                    NAME=$(jq -r '.name' <<< "$artifact")
+                    REPOSITORY=$(jq -r '.repository' <<< "$artifact")
+                    VERSION=$(jq -r '.version' <<< "$artifact")
+                    STATUS=$(jq -r '.status' <<< "$artifact")
+                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                    REGISTRY_CELL="-"
+                    VERSION_CELL="-"
+                    if [[ -n "$REPOSITORY" ]]; then
+                      REGISTRY_CELL="\`$(escape_table "$REPOSITORY")\`"
+                    fi
+                    if [[ -n "$VERSION" ]]; then
+                      VERSION_CELL="\`$(escape_table "$VERSION")\`"
+                    fi
+                    echo "| $(escape_table "$NAME") | ${REGISTRY_CELL} | ${VERSION_CELL} | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
+                  done
+                echo
+              else
+                echo "| Chart | Status | CI |"
+                echo "| --- | --- | --- |"
+                jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
+                  | while IFS= read -r artifact; do
+                    NAME=$(jq -r '.name' <<< "$artifact")
+                    STATUS=$(jq -r '.status' <<< "$artifact")
+                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
+                    echo "| $(escape_table "$NAME") | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
+                  done
+                echo
+              fi
+
               if [[ "$CHART_PUBLISHED_COUNT" -gt 0 ]]; then
                 echo "<details>"
                 echo "<summary>Helm install commands</summary>"
