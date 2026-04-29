@@ -118,7 +118,7 @@ jobs:
               }
             }' > prebuild-published.json
 
-          gh api /repos/${{ github.repository }}/dispatches --input prebuild-published.json
+          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-published.json
 
   cleanup-images:
     runs-on: ubuntu-latest

@@ -12,6 +12,7 @@ on:
       - 'build/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      - 'uv/**'
     types: [opened, synchronize, reopened, edited]
 
 permissions:
