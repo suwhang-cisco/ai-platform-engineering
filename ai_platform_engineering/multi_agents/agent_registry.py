@@ -1,6 +1,6 @@
 # Copyright 2025 CNOE Contributors
 # SPDX-License-Identifier: Apache-2.0
-
+#  SUNNY
 """
 Agent Registry for AI Platform Engineering Multi-Agent System.
 
