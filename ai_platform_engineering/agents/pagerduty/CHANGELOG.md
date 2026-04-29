@@ -1,4 +1,5 @@
 # Changelog
+# SUN SUN
 
 All notable changes to this project will be documented in this file.
 
@@ -36,4 +37,4 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for user management
 - Support for schedule management
 - Integration with Azure OpenAI
-- LangGraph and MCP adapter integration 
+- LangGraph and MCP adapter integration
