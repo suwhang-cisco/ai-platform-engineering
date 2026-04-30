@@ -1,5 +1,5 @@
 # Changelog
-# SUN SUN SUNNN FUCK CODEX YOU FUCKING DUMB BASTARD
+# SUN SUN SUNNN FUCK CODEX YOU FUCKING DUMB BASTARD FOOOOO
 
 All notable changes to this project will be documented in this file.
 
