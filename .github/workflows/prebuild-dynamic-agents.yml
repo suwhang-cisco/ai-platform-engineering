@@ -92,9 +92,7 @@ jobs:
                   run_url: $run_url
                 }]
               }
-            }' > prebuild-started.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-started.json || true
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input - || true
 
       - name: Extract metadata for Docker
         id: meta
@@ -160,9 +158,7 @@ jobs:
                   run_url: $run_url
                 }]
               }
-            }' > prebuild-published.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-published.json
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input -
 
   cleanup-images:
     runs-on: ubuntu-latest

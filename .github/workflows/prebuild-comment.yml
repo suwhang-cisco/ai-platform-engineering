@@ -10,515 +10,440 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: read
   issues: write
-  packages: read
-  pull-requests: write
+  pull-requests: read
 
 jobs:
   upsert-comment:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-
       - name: Upsert prebuild artifact comment
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          PREBUILD_PAYLOAD: ${{ toJson(github.event.client_payload) }}
-          OWNER: ${{ github.repository_owner }}
-          OWNER_TYPE: ${{ github.event.repository.owner.type }}
-        run: |
-          set -euo pipefail
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const payload = context.payload.client_payload || {};
+            const prNumber = Number(payload.pr_number);
+            const headSha = String(payload.head_sha || "");
+            const headRef = String(payload.head_ref || "");
+            const shortSha = headSha.slice(0, 7);
 
-          WORK_DIR="$RUNNER_TEMP/prebuild-comment"
-          mkdir -p "$WORK_DIR"
+            if (!prNumber || !headSha) {
+              core.setFailed("prebuild-published payload must include pr_number and head_sha");
+              return;
+            }
 
-          PAYLOAD_FILE="$WORK_DIR/payload.json"
-          EXISTING_STATE_FILE="$WORK_DIR/existing-state.json"
-          EXISTING_ARTIFACTS_FILE="$WORK_DIR/existing-artifacts.json"
-          PAYLOAD_ARTIFACTS_FILE="$WORK_DIR/payload-artifacts.json"
-          DISCOVERED_ARTIFACTS_FILE="$WORK_DIR/discovered-artifacts.json"
-          ARTIFACTS_FILE="$WORK_DIR/artifacts.json"
-          STATE_FILE="$WORK_DIR/state.json"
-          COMMENT_FILE="$WORK_DIR/comment.md"
-          REQUEST_FILE="$WORK_DIR/request.json"
+            const marker = `<!-- prebuild-artifacts pr=${prNumber} sha=${headSha} -->`;
+            const markerPrefix = `<!-- prebuild-artifacts pr=${prNumber} sha=`;
+            const repo = `${context.repo.owner}/${context.repo.repo}`;
 
-          printf '%s' "$PREBUILD_PAYLOAD" > "$PAYLOAD_FILE"
+            const normalizeStatus = (value) => {
+              const status = String(value || "published").toLowerCase();
+              if (["building", "in_progress", "pending", "queued"].includes(status)) {
+                return "building";
+              }
+              if (["failed", "failure", "cancelled", "canceled"].includes(status)) {
+                return "failed";
+              }
+              return "published";
+            };
 
-          PR_NUMBER=$(jq -r '.pr_number // empty' "$PAYLOAD_FILE")
-          HEAD_SHA=$(jq -r '.head_sha // empty' "$PAYLOAD_FILE")
-          HEAD_REF=$(jq -r '.head_ref // ""' "$PAYLOAD_FILE")
-          PREBUILD_TAG=$(jq -r '.prebuild_tag // ""' "$PAYLOAD_FILE")
-          CHART_SUFFIX=$(jq -r '.chart_suffix // ""' "$PAYLOAD_FILE")
+            const statusLabel = (status) => {
+              if (status === "building") return "Build in process";
+              if (status === "failed") return "Failed";
+              return "Published";
+            };
 
-          SHORT_SHA="${HEAD_SHA:0:7}"
+            const markdownCell = (value) => String(value || "").replaceAll("|", "\\|");
+            const codeCell = (value) => value ? `\`${markdownCell(value)}\`` : "-";
+            const ciCell = (runUrl) => runUrl ? `[CI](${runUrl})` : "-";
+            const present = (value) => String(value || "") !== "";
+            const keyFor = (artifact) => `${artifact.type}\0${artifact.name.toLowerCase()}`;
 
-          if [[ -z "$PR_NUMBER" || -z "$HEAD_SHA" ]]; then
-            echo "prebuild-published payload must include pr_number and head_sha"
-            exit 1
-          fi
+            const runUrlFromId = (runId) => runId ? `https://github.com/${repo}/actions/runs/${runId}` : "";
 
-          if [[ -z "$CHART_SUFFIX" ]]; then
-            CLEAN_BRANCH="${HEAD_REF#prebuild/}"
-            CLEAN_BRANCH="${CLEAN_BRANCH//\//-}"
-            CLEAN_BRANCH="${CLEAN_BRANCH//_/-}"
-            CLEAN_BRANCH=$(tr '[:upper:]' '[:lower:]' <<< "$CLEAN_BRANCH")
-            CHART_SUFFIX="${CLEAN_BRANCH}-${SHORT_SHA}"
-          fi
+            const normalizeArtifact = (artifact) => {
+              const runId = String(artifact.run_id || artifact.runId || payload.run_id || payload.runId || "");
+              const runUrl = String(artifact.run_url || artifact.runUrl || payload.run_url || payload.runUrl || runUrlFromId(runId) || "");
+              const type = artifact.type === "helm-chart" ? "helm-chart" : "image";
+              const repository = String(artifact.repository || artifact.image_repo || "");
+              const tag = String(artifact.tag || artifact.prebuild_tag || "");
+              const version = String(artifact.version || "");
+              const ref = String(artifact.ref || artifact.image_ref || (type === "image" && repository && tag ? `${repository}:${tag}` : ""));
 
-          MARKER="<!-- prebuild-artifacts pr=${PR_NUMBER} sha=${HEAD_SHA} -->"
-          MARKER_PREFIX="<!-- prebuild-artifacts pr=${PR_NUMBER} sha="
+              return {
+                type,
+                name: String(artifact.name || artifact.component || artifact.agent || ""),
+                repository,
+                tag,
+                version,
+                ref,
+                releaseName: String(artifact.releaseName || artifact.release_name || ""),
+                status: normalizeStatus(artifact.status),
+                workflow: String(artifact.workflow || payload.workflow || ""),
+                runId,
+                runUrl,
+              };
+            };
 
-          CURRENT_HEAD_SHA=$(gh api "/repos/${{ github.repository }}/pulls/${PR_NUMBER}" --jq '.head.sha' 2>/dev/null || echo "$HEAD_SHA")
-          IS_CURRENT_HEAD=false
-          if [[ "$HEAD_SHA" == "$CURRENT_HEAD_SHA" ]]; then
-            IS_CURRENT_HEAD=true
-          fi
+            const payloadArtifacts = (payload.artifacts || [])
+              .map(normalizeArtifact)
+              .filter((artifact) => artifact.name);
 
-          jq '.artifacts // []' "$PAYLOAD_FILE" > "$PAYLOAD_ARTIFACTS_FILE"
-          jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
+            const splitMarkdownRow = (line) => {
+              const cells = [];
+              let current = "";
+              let escaped = false;
 
-          gh api --paginate --slurp \
-            "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments?per_page=100" \
-            > "$WORK_DIR/comments-pages.json"
+              for (const char of line) {
+                if (escaped) {
+                  current += char;
+                  escaped = false;
+                  continue;
+                }
+                if (char === "\\") {
+                  escaped = true;
+                  continue;
+                }
+                if (char === "|") {
+                  cells.push(current.trim());
+                  current = "";
+                  continue;
+                }
+                current += char;
+              }
+              cells.push(current.trim());
+              return cells.slice(1, -1);
+            };
 
-          COMMENT_ID=$(jq -r --arg marker "$MARKER" '
-            add
-            | map(select(.user.type == "Bot" and ((.body // "") | contains($marker))))
-            | .[0].id // empty
-          ' "$WORK_DIR/comments-pages.json")
+            const cleanCell = (value) => {
+              let cell = String(value || "").trim();
+              if (cell === "-") return "";
+              if (cell.startsWith("`") && cell.endsWith("`")) {
+                cell = cell.slice(1, -1);
+              }
+              return cell;
+            };
 
-          jq -r --arg marker "$MARKER" '
-            add
-            | map(select(.user.type == "Bot" and ((.body // "") | contains($marker))))
-            | .[0].body // ""
-          ' "$WORK_DIR/comments-pages.json" > "$WORK_DIR/existing-comment.md"
+            const runUrlFromCell = (value) => {
+              const match = String(value || "").match(/^\[CI\]\((.+)\)$/);
+              return match ? match[1] : "";
+            };
 
-          DATA_MARKER=$(grep -o '<!-- prebuild-artifacts-data:[A-Za-z0-9+/=]* -->' "$WORK_DIR/existing-comment.md" \
-            | head -n1 \
-            | sed 's/^<!-- prebuild-artifacts-data://; s/ -->$//' || true)
+            const statusFromCell = (value) => {
+              if (value === "Build in process") return "building";
+              if (value === "Failed") return "failed";
+              return "published";
+            };
 
-          if [[ -n "$DATA_MARKER" ]]; then
-            if ! printf '%s' "$DATA_MARKER" | base64 -d > "$EXISTING_STATE_FILE" 2>/dev/null; then
-              jq -n '{artifacts: []}' > "$EXISTING_STATE_FILE"
-            fi
-          fi
+            const parseExistingArtifacts = (body) => {
+              const artifacts = [];
+              let section = "";
+              let headers = [];
 
-          jq '.artifacts // []' "$EXISTING_STATE_FILE" > "$EXISTING_ARTIFACTS_FILE"
+              for (const line of body.split("\n")) {
+                if (line.startsWith("### Docker Images")) {
+                  section = "image";
+                  headers = [];
+                  continue;
+                }
+                if (line.startsWith("### Helm Charts")) {
+                  section = "helm-chart";
+                  headers = [];
+                  continue;
+                }
+                if (line.startsWith("### ")) {
+                  section = "";
+                  headers = [];
+                  continue;
+                }
+                if (!section || !line.startsWith("|")) {
+                  continue;
+                }
+                if (/^\|[ -]*---/.test(line)) {
+                  continue;
+                }
 
-          package_versions() {
-            local package_name="$1"
-            local encoded_package
-            local owner_path
+                const cells = splitMarkdownRow(line);
+                if (!headers.length) {
+                  headers = cells;
+                  continue;
+                }
 
-            encoded_package=$(jq -rn --arg value "$package_name" '$value | @uri')
-            if [[ "$OWNER_TYPE" == "User" ]]; then
-              owner_path="/users/${OWNER}"
-            else
-              owner_path="/orgs/${OWNER}"
-            fi
+                const column = (name) => {
+                  const index = headers.indexOf(name);
+                  return index === -1 ? "" : cells[index] || "";
+                };
 
-            gh api --paginate --slurp \
-              "${owner_path}/packages/container/${encoded_package}/versions?per_page=100" \
-              2> "$WORK_DIR/package.err" \
-              | jq 'add'
-          }
+                if (section === "image") {
+                  const repository = cleanCell(column("Image"));
+                  const tag = cleanCell(column("Tag"));
+                  artifacts.push({
+                    type: "image",
+                    name: cleanCell(column("Artifact")),
+                    repository,
+                    tag,
+                    version: "",
+                    ref: repository && tag ? `${repository}:${tag}` : "",
+                    releaseName: "",
+                    status: statusFromCell(column("Status")),
+                    workflow: "",
+                    runId: "",
+                    runUrl: runUrlFromCell(column("CI")),
+                  });
+                } else {
+                  artifacts.push({
+                    type: "helm-chart",
+                    name: cleanCell(column("Chart")),
+                    repository: cleanCell(column("Registry")),
+                    tag: "",
+                    version: cleanCell(column("Version")),
+                    ref: "",
+                    releaseName: "",
+                    status: statusFromCell(column("Status")),
+                    workflow: "",
+                    runId: "",
+                    runUrl: runUrlFromCell(column("CI")),
+                  });
+                }
+              }
 
-          : > "$WORK_DIR/discovered.ndjson"
+              return artifacts.filter((artifact) => artifact.name);
+            };
 
-          if [[ -n "$PREBUILD_TAG" ]]; then
-            jq -r --arg owner "$OWNER" '
-              [
-                ["Supervisor Agent", "prebuild/ai-platform-engineering"],
-                ["CAIPE UI", "prebuild/caipe-ui"],
-                ["Slack Bot", "prebuild/caipe-slack-bot"],
-                ["Dynamic Agents", "prebuild/caipe-dynamic-agents"]
-              ]
-              + ((.a2a_agents // []) | map(["A2A Agent: " + ., "prebuild/agent-" + .]))
-              + ((.mcp_agents // []) | map(["MCP Agent: " + ., "prebuild/mcp-" + .]))
-              + ((.rag_components // ["agent-ontology", "server", "ingestors"]) | map(["RAG: " + ., "prebuild/caipe-rag-" + .]))
-              | .[]
-              | [.[0], .[1], ("ghcr.io/" + $owner + "/" + .[1])]
-              | @tsv
-            ' .github/agents.json > "$WORK_DIR/image-definitions.tsv"
+            const sameRun = (oldArtifact, newArtifact) => {
+              return (present(oldArtifact.runId) && present(newArtifact.runId) && oldArtifact.runId === newArtifact.runId)
+                || (present(oldArtifact.runUrl) && present(newArtifact.runUrl) && oldArtifact.runUrl === newArtifact.runUrl);
+            };
 
-            while IFS=$'\t' read -r name package_name repository; do
-              if package_versions "$package_name" > "$WORK_DIR/package-versions.json"; then
-                if jq -e --arg tag "$PREBUILD_TAG" '
-                  any(.[]?; ((.metadata.container.tags // []) | index($tag)))
-                ' "$WORK_DIR/package-versions.json" > /dev/null; then
-                  jq -n \
-                    --arg type "image" \
-                    --arg name "$name" \
-                    --arg repository "$repository" \
-                    --arg tag "$PREBUILD_TAG" \
-                    --arg ref "${repository}:${PREBUILD_TAG}" \
-                    --arg source "ghcr" \
-                    '{type: $type, name: $name, repository: $repository, tag: $tag, ref: $ref, source: $source}' \
-                    >> "$WORK_DIR/discovered.ndjson"
-                fi
-              elif ! grep -q "HTTP 404" "$WORK_DIR/package.err"; then
-                echo "Warning: failed to list package ${package_name}" >&2
-                cat "$WORK_DIR/package.err" >&2
-              fi
-            done < "$WORK_DIR/image-definitions.tsv"
-          fi
+            const mergeArtifact = (oldArtifact = {}, newArtifact) => {
+              if (newArtifact.status === "building") {
+                if (oldArtifact.status === "published" && sameRun(oldArtifact, newArtifact)) {
+                  return oldArtifact;
+                }
+                return {
+                  ...newArtifact,
+                  repository: "",
+                  tag: "",
+                  version: "",
+                  ref: "",
+                };
+              }
 
-          if [[ -n "$CHART_SUFFIX" ]]; then
-            {
-              printf 'rag-stack\tprebuild-helm-charts/rag-stack\trag\n'
-              printf 'ai-platform-engineering\tprebuild-helm-charts/ai-platform-engineering\tai-platform\n'
-            } > "$WORK_DIR/chart-definitions.tsv"
+              return {
+                ...newArtifact,
+                repository: newArtifact.repository || oldArtifact.repository || "",
+                tag: newArtifact.tag || oldArtifact.tag || "",
+                version: newArtifact.version || oldArtifact.version || "",
+                ref: newArtifact.ref || oldArtifact.ref || "",
+                releaseName: newArtifact.releaseName || oldArtifact.releaseName || "",
+                workflow: newArtifact.workflow || oldArtifact.workflow || "",
+                runId: newArtifact.runId || oldArtifact.runId || "",
+                runUrl: newArtifact.runUrl || oldArtifact.runUrl || "",
+              };
+            };
 
-            while IFS=$'\t' read -r chart package_name release_name; do
-              repository="ghcr.io/${OWNER}/prebuild-helm-charts/${chart}"
-              if package_versions "$package_name" > "$WORK_DIR/package-versions.json"; then
-                jq -r --arg suffix "-${CHART_SUFFIX}" '
-                  [.[]?.metadata.container.tags[]? | select(endswith($suffix))]
-                  | unique
-                  | .[]
-                ' "$WORK_DIR/package-versions.json" \
-                  | while IFS= read -r version; do
-                    jq -n \
-                      --arg type "helm-chart" \
-                      --arg name "$chart" \
-                      --arg repository "$repository" \
-                      --arg version "$version" \
-                      --arg releaseName "$release_name" \
-                      --arg source "ghcr" \
-                      '{type: $type, name: $name, repository: $repository, version: $version, releaseName: $releaseName, source: $source}' \
-                      >> "$WORK_DIR/discovered.ndjson"
-                  done
-              elif ! grep -q "HTTP 404" "$WORK_DIR/package.err"; then
-                echo "Warning: failed to list package ${package_name}" >&2
-                cat "$WORK_DIR/package.err" >&2
-              fi
-            done < "$WORK_DIR/chart-definitions.tsv"
-          fi
+            const releaseNameFor = (artifact) => {
+              if (artifact.releaseName) return artifact.releaseName;
+              if (artifact.name === "rag-stack") return "rag";
+              if (artifact.name === "ai-platform-engineering") return "ai-platform";
+              return artifact.name;
+            };
 
-          if [[ -s "$WORK_DIR/discovered.ndjson" ]]; then
-            jq -s '.' "$WORK_DIR/discovered.ndjson" > "$DISCOVERED_ARTIFACTS_FILE"
-          else
-            jq -n '[]' > "$DISCOVERED_ARTIFACTS_FILE"
-          fi
+            const renderCompactTable = (artifacts, label) => [
+              `| ${label} | Status | CI |`,
+              "| --- | --- | --- |",
+              ...artifacts.map((artifact) =>
+                `| ${markdownCell(artifact.name)} | ${statusLabel(artifact.status)} | ${ciCell(artifact.runUrl)} |`
+              ),
+            ].join("\n");
 
-          jq -s --arg repo "${{ github.repository }}" '
-            def normalized_status:
-              (.status // (if .source == "ghcr" then "published" else "published" end) | tostring | ascii_downcase) as $status
-              | if ["building", "in_progress", "pending", "queued"] | index($status) then "building"
-                elif ["failed", "failure", "cancelled", "canceled"] | index($status) then "failed"
-                else "published"
-                end;
+            const renderImageTable = (artifacts) => [
+              "| Artifact | Image | Tag | Status | CI |",
+              "| --- | --- | --- | --- | --- |",
+              ...artifacts.map((artifact) =>
+                `| ${markdownCell(artifact.name)} | ${codeCell(artifact.repository)} | ${codeCell(artifact.tag)} | ${statusLabel(artifact.status)} | ${ciCell(artifact.runUrl)} |`
+              ),
+            ].join("\n");
 
-            def status_rank:
-              if .status == "published" then 2
-              elif .status == "failed" then 1
-              else 0
-              end;
+            const renderChartTable = (artifacts) => [
+              "| Chart | Registry | Version | Status | CI |",
+              "| --- | --- | --- | --- | --- |",
+              ...artifacts.map((artifact) =>
+                `| ${markdownCell(artifact.name)} | ${codeCell(artifact.repository)} | ${codeCell(artifact.version)} | ${statusLabel(artifact.status)} | ${ciCell(artifact.runUrl)} |`
+              ),
+            ].join("\n");
 
-            def source_rank:
-              if .source == "payload" then 1 else 0 end;
+            const renderComment = (artifacts, collapsed = false) => {
+              const imageArtifacts = artifacts.filter((artifact) => artifact.type === "image");
+              const chartArtifacts = artifacts.filter((artifact) => artifact.type === "helm-chart");
+              const lines = [
+                marker,
+                `## Prebuild Artifacts for \`${shortSha}\``,
+                "",
+                `**Branch:** \`${headRef}\``,
+                `**Commit:** \`${shortSha}\``,
+                "",
+              ];
 
-            def filled($items; $field):
-              (($items | map(select((.[$field] // "") != "") | .[$field]) | last) // "");
+              if (imageArtifacts.length) {
+                lines.push("### Docker Images", "");
+                if (imageArtifacts.some((artifact) => artifact.status === "published")) {
+                  lines.push(renderImageTable(imageArtifacts), "");
+                } else {
+                  lines.push(renderCompactTable(imageArtifacts, "Artifact"), "");
+                }
 
-            def preferred_run_value($items; $field):
-              (($items | map(select(.source == "payload" and ((.[$field] // "") != "")) | .[$field]) | last)
-                // ($items | map(select((.[$field] // "") != "") | .[$field]) | last)
-                // "");
+                const pullable = imageArtifacts.filter((artifact) => artifact.status === "published" && artifact.ref);
+                if (pullable.length) {
+                  lines.push(
+                    "<details>",
+                    "<summary>Docker pull commands</summary>",
+                    "",
+                    "```bash",
+                    ...pullable.map((artifact) => `docker pull ${artifact.ref}`),
+                    "```",
+                    "",
+                    "</details>",
+                    "",
+                  );
+                }
+              }
 
-            add
-            | map(select(type == "object"))
-            | map({
-                type: (if .type == "helm-chart" then "helm-chart" else "image" end),
-                name: ((.name // .component // .agent // "") | tostring),
-                repository: ((.repository // .image_repo // "") | tostring),
-                tag: ((.tag // .prebuild_tag // "") | tostring),
-                version: ((.version // "") | tostring),
-                ref: ((.ref // .image_ref // "") | tostring),
-                releaseName: ((.releaseName // .release_name // "") | tostring),
-                status: normalized_status,
-                workflow: ((.workflow // "") | tostring),
-                runId: ((.run_id // .runId // "") | tostring),
-                runUrl: ((.run_url // .runUrl // "") | tostring),
-                source: ((.source // "payload") | tostring)
-              })
-            | map(select(.name != ""))
-            | map(.ref = (if .type == "image" and .ref == "" and .repository != "" and .tag != "" then "\(.repository):\(.tag)" else .ref end))
-            | map(.runUrl = (if .runUrl == "" and .runId != "" then "https://github.com/\($repo)/actions/runs/\(.runId)" else .runUrl end))
-            | map(select(
-                .status == "building"
-                or (.type == "image" and (.tag != "" or .ref != ""))
-                or (.type == "helm-chart" and .version != "")
-              ))
-            | sort_by([
-              .type,
-                (.name | ascii_downcase)
-              ])
-            | group_by([
-              .type,
-                (.name | ascii_downcase)
-              ])
-            | map(
-                sort_by([status_rank, source_rank]) as $items
-                | ($items | last) as $best
-                | $best
-                | .repository = filled($items; "repository")
-                | .tag = filled($items; "tag")
-                | .version = filled($items; "version")
-                | .ref = filled($items; "ref")
-                | .releaseName = filled($items; "releaseName")
-                | .workflow = preferred_run_value($items; "workflow")
-                | .runId = preferred_run_value($items; "runId")
-                | .runUrl = preferred_run_value($items; "runUrl")
+              if (chartArtifacts.length) {
+                lines.push("### Helm Charts", "");
+                if (chartArtifacts.some((artifact) => artifact.status === "published")) {
+                  lines.push(renderChartTable(chartArtifacts), "");
+                } else {
+                  lines.push(renderCompactTable(chartArtifacts, "Chart"), "");
+                }
+
+                const installable = chartArtifacts.filter((artifact) => artifact.status === "published" && artifact.repository && artifact.version);
+                if (installable.length) {
+                  lines.push(
+                    "<details>",
+                    "<summary>Helm install commands</summary>",
+                    "",
+                    "```bash",
+                    ...installable.map((artifact) => `helm upgrade --install ${releaseNameFor(artifact)} oci://${artifact.repository} --version ${artifact.version}`),
+                    "```",
+                    "",
+                    "</details>",
+                    "",
+                  );
+                }
+              }
+
+              if (!imageArtifacts.length && !chartArtifacts.length) {
+                lines.push("No prebuild artifacts have been reported yet.", "");
+              }
+
+              lines.push("> These prebuild artifacts will be automatically cleaned up when the PR is closed or merged.");
+              const body = lines.join("\n");
+
+              if (!collapsed) {
+                return body;
+              }
+
+              return [
+                marker,
+                "<details>",
+                `<summary>Prebuild Artifacts for \`${shortSha}\` (archived)</summary>`,
+                "",
+                body.replace(marker, "").trim(),
+                "",
+                "</details>",
+              ].join("\n");
+            };
+
+            const [{ data: pull }] = await Promise.all([
+              github.rest.pulls.get({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+              }),
+            ]);
+            const isCurrentHead = pull.head.sha === headSha;
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: prNumber,
+              per_page: 100,
+            });
+
+            const existingComment = comments.find((comment) =>
+              comment.user?.type === "Bot" && (comment.body || "").includes(marker)
+            );
+
+            const artifactsByKey = new Map();
+            for (const artifact of parseExistingArtifacts(existingComment?.body || "")) {
+              artifactsByKey.set(keyFor(artifact), artifact);
+            }
+            for (const artifact of payloadArtifacts) {
+              const key = keyFor(artifact);
+              artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
+            }
+
+            const artifacts = [...artifactsByKey.values()]
+              .filter((artifact) =>
+                artifact.status === "building"
+                || artifact.status === "failed"
+                || (artifact.type === "image" && (artifact.tag || artifact.ref))
+                || (artifact.type === "helm-chart" && artifact.version)
               )
-            | sort_by((.type == "helm-chart"), .name)
-          ' "$EXISTING_ARTIFACTS_FILE" "$PAYLOAD_ARTIFACTS_FILE" "$DISCOVERED_ARTIFACTS_FILE" > "$ARTIFACTS_FILE"
+              .sort((a, b) => Number(a.type === "helm-chart") - Number(b.type === "helm-chart") || a.name.localeCompare(b.name));
 
-          jq -n \
-            --slurpfile artifacts "$ARTIFACTS_FILE" \
-            --argjson pr_number "$PR_NUMBER" \
-            --arg head_sha "$HEAD_SHA" \
-            --arg head_ref "$HEAD_REF" \
-            --arg prebuild_tag "$PREBUILD_TAG" \
-            --arg chart_suffix "$CHART_SUFFIX" \
-            --arg updated_at "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-            '{
-              version: 1,
-              pr_number: $pr_number,
-              head_sha: $head_sha,
-              head_ref: $head_ref,
-              prebuild_tag: $prebuild_tag,
-              chart_suffix: $chart_suffix,
-              updated_at: $updated_at,
-              artifacts: $artifacts[0]
-            }' > "$STATE_FILE"
+            const body = renderComment(artifacts, !isCurrentHead);
 
-          STATE_DATA=$(base64 -w0 < "$STATE_FILE")
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existingComment.id,
+                body,
+              });
+              core.info(`Updated prebuild artifact comment ${existingComment.id}`);
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: prNumber,
+                body,
+              });
+              core.info("Created prebuild artifact comment");
+            }
 
-          escape_table() {
-            sed 's/|/\\|/g' <<< "$1"
-          }
+            if (!isCurrentHead) {
+              return;
+            }
 
-          collapse_comment_file() {
-            local source_file="$1"
-            local target_file="$2"
-            local comment_sha="$3"
+            const olderComments = comments.filter((comment) =>
+              comment.user?.type === "Bot"
+              && (comment.body || "").includes(markerPrefix)
+              && !(comment.body || "").includes(marker)
+            );
 
-            local marker_line
-            local data_line
-            local short_comment_sha
-            marker_line=$(grep -m1 '^<!-- prebuild-artifacts pr=' "$source_file" || true)
-            data_line=$(grep -m1 '^<!-- prebuild-artifacts-data:' "$source_file" || true)
-            short_comment_sha="${comment_sha:0:7}"
+            for (const comment of olderComments) {
+              const oldMarker = (comment.body || "").match(/<!-- prebuild-artifacts pr=\d+ sha=([^ ]+) -->/);
+              const oldShortSha = oldMarker?.[1]?.slice(0, 7) || "previous";
 
-            {
-              [[ -n "$marker_line" ]] && echo "$marker_line"
-              [[ -n "$data_line" ]] && echo "$data_line"
-              echo "<details>"
-              echo "<summary>Prebuild Artifacts for \`${short_comment_sha}\` (archived)</summary>"
-              echo
-              grep -v -E '^<!-- prebuild-artifacts pr=|^<!-- prebuild-artifacts-data:' "$source_file" || true
-              echo
-              echo "</details>"
-            } > "$target_file"
-          }
+              if ((comment.body || "").includes("(archived)</summary>")) {
+                continue;
+              }
 
-          status_label() {
-            case "$1" in
-              building) printf 'Build in process' ;;
-              failed) printf 'Failed' ;;
-              *) printf 'Published' ;;
-            esac
-          }
-
-          ci_link() {
-            local run_url="$1"
-            if [[ -n "$run_url" ]]; then
-              printf '[CI](%s)' "$run_url"
-            else
-              printf '-'
-            fi
-          }
-
-          {
-            echo "$MARKER"
-            echo "<!-- prebuild-artifacts-data:${STATE_DATA} -->"
-            echo "## Prebuild Artifacts for \`${SHORT_SHA}\`"
-            echo
-            echo "**Branch:** \`${HEAD_REF}\`"
-            echo "**Commit:** \`${SHORT_SHA}\`"
-            echo
-
-            IMAGE_COUNT=$(jq '[.[] | select(.type == "image")] | length' "$ARTIFACTS_FILE")
-            CHART_COUNT=$(jq '[.[] | select(.type == "helm-chart")] | length' "$ARTIFACTS_FILE")
-
-            if [[ "$IMAGE_COUNT" -gt 0 ]]; then
-              echo "### Docker Images"
-              echo
-              IMAGE_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "image" and .status == "published")] | length' "$ARTIFACTS_FILE")
-              if [[ "$IMAGE_PUBLISHED_COUNT" -gt 0 ]]; then
-                echo "| Artifact | Image | Tag | Status | CI |"
-                echo "| --- | --- | --- | --- | --- |"
-                jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
-                  | while IFS= read -r artifact; do
-                    NAME=$(jq -r '.name' <<< "$artifact")
-                    REPOSITORY=$(jq -r '.repository' <<< "$artifact")
-                    TAG=$(jq -r '.tag' <<< "$artifact")
-                    STATUS=$(jq -r '.status' <<< "$artifact")
-                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                    IMAGE_CELL="-"
-                    TAG_CELL="-"
-                    if [[ -n "$REPOSITORY" ]]; then
-                      IMAGE_CELL="\`$(escape_table "$REPOSITORY")\`"
-                    fi
-                    if [[ -n "$TAG" ]]; then
-                      TAG_CELL="\`$(escape_table "$TAG")\`"
-                    fi
-                    echo "| $(escape_table "$NAME") | ${IMAGE_CELL} | ${TAG_CELL} | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                  done
-                echo
-              else
-                echo "| Artifact | Status | CI |"
-                echo "| --- | --- | --- |"
-                jq -c '.[] | select(.type == "image")' "$ARTIFACTS_FILE" \
-                  | while IFS= read -r artifact; do
-                    NAME=$(jq -r '.name' <<< "$artifact")
-                    STATUS=$(jq -r '.status' <<< "$artifact")
-                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                    echo "| $(escape_table "$NAME") | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                  done
-                echo
-              fi
-
-              if [[ "$IMAGE_PUBLISHED_COUNT" -gt 0 ]]; then
-                echo "<details>"
-                echo "<summary>Docker pull commands</summary>"
-                echo
-                echo '```bash'
-                jq -r '.[] | select(.type == "image" and .status == "published") | "docker pull \(.ref)"' "$ARTIFACTS_FILE"
-                echo '```'
-                echo
-                echo "</details>"
-                echo
-              fi
-            fi
-
-            if [[ "$CHART_COUNT" -gt 0 ]]; then
-              echo "### Helm Charts"
-              echo
-              CHART_PUBLISHED_COUNT=$(jq '[.[] | select(.type == "helm-chart" and .status == "published")] | length' "$ARTIFACTS_FILE")
-              if [[ "$CHART_PUBLISHED_COUNT" -gt 0 ]]; then
-                echo "| Chart | Registry | Version | Status | CI |"
-                echo "| --- | --- | --- | --- | --- |"
-                jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
-                  | while IFS= read -r artifact; do
-                    NAME=$(jq -r '.name' <<< "$artifact")
-                    REPOSITORY=$(jq -r '.repository' <<< "$artifact")
-                    VERSION=$(jq -r '.version' <<< "$artifact")
-                    STATUS=$(jq -r '.status' <<< "$artifact")
-                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                    REGISTRY_CELL="-"
-                    VERSION_CELL="-"
-                    if [[ -n "$REPOSITORY" ]]; then
-                      REGISTRY_CELL="\`$(escape_table "$REPOSITORY")\`"
-                    fi
-                    if [[ -n "$VERSION" ]]; then
-                      VERSION_CELL="\`$(escape_table "$VERSION")\`"
-                    fi
-                    echo "| $(escape_table "$NAME") | ${REGISTRY_CELL} | ${VERSION_CELL} | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                  done
-                echo
-              else
-                echo "| Chart | Status | CI |"
-                echo "| --- | --- | --- |"
-                jq -c '.[] | select(.type == "helm-chart")' "$ARTIFACTS_FILE" \
-                  | while IFS= read -r artifact; do
-                    NAME=$(jq -r '.name' <<< "$artifact")
-                    STATUS=$(jq -r '.status' <<< "$artifact")
-                    RUN_URL=$(jq -r '.runUrl' <<< "$artifact")
-                    echo "| $(escape_table "$NAME") | $(status_label "$STATUS") | $(ci_link "$RUN_URL") |"
-                  done
-                echo
-              fi
-
-              if [[ "$CHART_PUBLISHED_COUNT" -gt 0 ]]; then
-                echo "<details>"
-                echo "<summary>Helm install commands</summary>"
-                echo
-                echo '```bash'
-                jq -r '.[] | select(.type == "helm-chart" and .status == "published") | "helm upgrade --install \(.releaseName // .name) oci://\(.repository) --version \(.version)"' "$ARTIFACTS_FILE"
-                echo '```'
-                echo
-                echo "</details>"
-              fi
-              echo
-            fi
-
-            if [[ "$IMAGE_COUNT" -eq 0 && "$CHART_COUNT" -eq 0 ]]; then
-              echo "No published prebuild artifacts have been detected yet."
-              echo
-            fi
-
-            echo "> These prebuild artifacts will be automatically cleaned up when the PR is closed or merged."
-          } > "$COMMENT_FILE"
-
-          if [[ "$IS_CURRENT_HEAD" != "true" ]]; then
-            collapse_comment_file "$COMMENT_FILE" "$WORK_DIR/comment-collapsed.md" "$HEAD_SHA"
-            mv "$WORK_DIR/comment-collapsed.md" "$COMMENT_FILE"
-          fi
-
-          jq -n --rawfile body "$COMMENT_FILE" '{body: $body}' > "$REQUEST_FILE"
-
-          if [[ -n "$COMMENT_ID" ]]; then
-            gh api \
-              --method PATCH \
-              "/repos/${{ github.repository }}/issues/comments/${COMMENT_ID}" \
-              --input "$REQUEST_FILE"
-            echo "Updated prebuild artifact comment ${COMMENT_ID}"
-          else
-            gh api \
-              --method POST \
-              "/repos/${{ github.repository }}/issues/${PR_NUMBER}/comments" \
-              --input "$REQUEST_FILE"
-            echo "Created prebuild artifact comment"
-          fi
-
-          if [[ "$IS_CURRENT_HEAD" == "true" ]]; then
-            jq -r --arg marker_prefix "$MARKER_PREFIX" --arg marker "$MARKER" '
-              add
-              | map(select(
-                  .user.type == "Bot"
-                  and ((.body // "") | contains($marker_prefix))
-                  and (((.body // "") | contains($marker)) | not)
-                ))
-              | .[]
-              | [
-                  .id,
-                  (((.body // "") | capture("<!-- prebuild-artifacts pr=[0-9]+ sha=(?<sha>[^ ]+) -->").sha) // ""),
-                  ((.body // "") | @base64)
-                ]
-              | @tsv
-            ' "$WORK_DIR/comments-pages.json" > "$WORK_DIR/archive-comments.tsv"
-
-            while IFS=$'\t' read -r old_comment_id old_head_sha old_body_b64; do
-              if [[ -z "$old_comment_id" || -z "$old_head_sha" || -z "$old_body_b64" ]]; then
-                continue
-              fi
-
-              printf '%s' "$old_body_b64" | base64 -d > "$WORK_DIR/old-comment.md" || continue
-              if grep -q '<summary>Prebuild Artifacts for `.*` (archived)</summary>' "$WORK_DIR/old-comment.md"; then
-                continue
-              fi
-
-              collapse_comment_file "$WORK_DIR/old-comment.md" "$WORK_DIR/old-comment-collapsed.md" "$old_head_sha"
-              jq -n --rawfile body "$WORK_DIR/old-comment-collapsed.md" '{body: $body}' > "$WORK_DIR/archive-request.json"
-              gh api \
-                --method PATCH \
-                "/repos/${{ github.repository }}/issues/comments/${old_comment_id}" \
-                --input "$WORK_DIR/archive-request.json"
-              echo "Archived older prebuild artifact comment ${old_comment_id}"
-            done < "$WORK_DIR/archive-comments.tsv"
-          fi
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: comment.id,
+                body: [
+                  oldMarker?.[0] || "",
+                  "<details>",
+                  `<summary>Prebuild Artifacts for \`${oldShortSha}\` (archived)</summary>`,
+                  "",
+                  (comment.body || "").replace(oldMarker?.[0] || "", "").trim(),
+                  "",
+                  "</details>",
+                ].filter(Boolean).join("\n"),
+              });
+              core.info(`Archived older prebuild artifact comment ${comment.id}`);
+            }

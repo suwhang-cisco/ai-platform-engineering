@@ -271,53 +271,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          jq -n '[]' > prebuild-artifacts.json
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
 
-          if [[ "${{ steps.detect.outputs.rag-stack-changed }}" == "true" ]]; then
-            jq \
-              --arg type "helm-chart" \
-              --arg name "rag-stack" \
-              --arg releaseName "rag" \
-              --arg status "building" \
-              --arg workflow "$GITHUB_WORKFLOW" \
-              --arg run_id "$GITHUB_RUN_ID" \
-              --arg run_url "$RUN_URL" \
-              '. + [{
-                type: $type,
-                name: $name,
-                releaseName: $releaseName,
-                status: $status,
-                workflow: $workflow,
-                run_id: $run_id,
-                run_url: $run_url
-              }]' prebuild-artifacts.json > prebuild-artifacts.tmp
-            mv prebuild-artifacts.tmp prebuild-artifacts.json
-          fi
-
-          if [[ "${{ steps.detect.outputs.ai-platform-changed }}" == "true" ]]; then
-            jq \
-              --arg type "helm-chart" \
-              --arg name "ai-platform-engineering" \
-              --arg releaseName "ai-platform" \
-              --arg status "building" \
-              --arg workflow "$GITHUB_WORKFLOW" \
-              --arg run_id "$GITHUB_RUN_ID" \
-              --arg run_url "$RUN_URL" \
-              '. + [{
-                type: $type,
-                name: $name,
-                releaseName: $releaseName,
-                status: $status,
-                workflow: $workflow,
-                run_id: $run_id,
-                run_url: $run_url
-              }]' prebuild-artifacts.json > prebuild-artifacts.tmp
-            mv prebuild-artifacts.tmp prebuild-artifacts.json
-          fi
-
           jq -n \
-            --slurpfile artifacts prebuild-artifacts.json \
             --argjson pr_number "${{ steps.bump-status.outputs.pr_number }}" \
             --arg head_sha "${{ steps.pr-info.outputs.head_sha }}" \
             --arg head_ref "${{ steps.pr-info.outputs.head_ref }}" \
@@ -325,6 +281,9 @@ jobs:
             --arg chart_suffix "${{ steps.version.outputs.chart-suffix }}" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
+            --arg rag_changed "${{ steps.detect.outputs.rag-stack-changed }}" \
+            --arg ai_changed "${{ steps.detect.outputs.ai-platform-changed }}" \
             '{
               event_type: "prebuild-published",
               client_payload: {
@@ -335,11 +294,29 @@ jobs:
                 chart_suffix: $chart_suffix,
                 workflow: $workflow,
                 run_id: $run_id,
-                artifacts: $artifacts[0]
+                run_url: $run_url,
+                artifacts: [
+                  if $rag_changed == "true" then {
+                    type: "helm-chart",
+                    name: "rag-stack",
+                    releaseName: "rag",
+                    status: "building",
+                    workflow: $workflow,
+                    run_id: $run_id,
+                    run_url: $run_url
+                  } else empty end,
+                  if $ai_changed == "true" then {
+                    type: "helm-chart",
+                    name: "ai-platform-engineering",
+                    releaseName: "ai-platform",
+                    status: "building",
+                    workflow: $workflow,
+                    run_id: $run_id,
+                    run_url: $run_url
+                  } else empty end
+                ]
               }
-            }' > prebuild-started.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-started.json || true
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input - || true
 
       - name: 📦 Package rag-stack Chart
         if: steps.version-check.outputs.skip != 'true' && steps.detect.outputs.rag-stack-changed == 'true'
@@ -429,61 +406,9 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REGISTRY: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
         run: |
-          jq -n '[]' > prebuild-artifacts.json
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
 
-          if [[ "${{ steps.detect.outputs.rag-stack-changed }}" == "true" ]]; then
-            jq \
-              --arg type "helm-chart" \
-              --arg name "rag-stack" \
-              --arg repository "${REGISTRY}/rag-stack" \
-              --arg version "${{ steps.version.outputs.rag-stack-version }}" \
-              --arg releaseName "rag" \
-              --arg status "published" \
-              --arg workflow "$GITHUB_WORKFLOW" \
-              --arg run_id "$GITHUB_RUN_ID" \
-              --arg run_url "$RUN_URL" \
-              '. + [{
-                type: $type,
-                name: $name,
-                repository: $repository,
-                version: $version,
-                releaseName: $releaseName,
-                status: $status,
-                workflow: $workflow,
-                run_id: $run_id,
-                run_url: $run_url
-              }]' prebuild-artifacts.json > prebuild-artifacts.tmp
-            mv prebuild-artifacts.tmp prebuild-artifacts.json
-          fi
-
-          if [[ "${{ steps.detect.outputs.ai-platform-changed }}" == "true" ]]; then
-            jq \
-              --arg type "helm-chart" \
-              --arg name "ai-platform-engineering" \
-              --arg repository "${REGISTRY}/ai-platform-engineering" \
-              --arg version "${{ steps.version.outputs.ai-platform-version }}" \
-              --arg releaseName "ai-platform" \
-              --arg status "published" \
-              --arg workflow "$GITHUB_WORKFLOW" \
-              --arg run_id "$GITHUB_RUN_ID" \
-              --arg run_url "$RUN_URL" \
-              '. + [{
-                type: $type,
-                name: $name,
-                repository: $repository,
-                version: $version,
-                releaseName: $releaseName,
-                status: $status,
-                workflow: $workflow,
-                run_id: $run_id,
-                run_url: $run_url
-              }]' prebuild-artifacts.json > prebuild-artifacts.tmp
-            mv prebuild-artifacts.tmp prebuild-artifacts.json
-          fi
-
           jq -n \
-            --slurpfile artifacts prebuild-artifacts.json \
             --argjson pr_number "${{ steps.bump-status.outputs.pr_number }}" \
             --arg head_sha "${{ steps.pr-info.outputs.head_sha }}" \
             --arg head_ref "${{ steps.pr-info.outputs.head_ref }}" \
@@ -491,6 +416,12 @@ jobs:
             --arg chart_suffix "${{ steps.version.outputs.chart-suffix }}" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
+            --arg registry "$REGISTRY" \
+            --arg rag_changed "${{ steps.detect.outputs.rag-stack-changed }}" \
+            --arg ai_changed "${{ steps.detect.outputs.ai-platform-changed }}" \
+            --arg rag_version "${{ steps.version.outputs.rag-stack-version }}" \
+            --arg ai_version "${{ steps.version.outputs.ai-platform-version }}" \
             '{
               event_type: "prebuild-published",
               client_payload: {
@@ -501,8 +432,30 @@ jobs:
                 chart_suffix: $chart_suffix,
                 workflow: $workflow,
                 run_id: $run_id,
-                artifacts: $artifacts[0]
+                run_url: $run_url,
+                artifacts: [
+                  if $rag_changed == "true" then {
+                    type: "helm-chart",
+                    name: "rag-stack",
+                    repository: ($registry + "/rag-stack"),
+                    version: $rag_version,
+                    releaseName: "rag",
+                    status: "published",
+                    workflow: $workflow,
+                    run_id: $run_id,
+                    run_url: $run_url
+                  } else empty end,
+                  if $ai_changed == "true" then {
+                    type: "helm-chart",
+                    name: "ai-platform-engineering",
+                    repository: ($registry + "/ai-platform-engineering"),
+                    version: $ai_version,
+                    releaseName: "ai-platform",
+                    status: "published",
+                    workflow: $workflow,
+                    run_id: $run_id,
+                    run_url: $run_url
+                  } else empty end
+                ]
               }
-            }' > prebuild-published.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-published.json
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input -

@@ -121,26 +121,13 @@ jobs:
 
           jq -n \
             --argjson agents "$AGENTS" \
-            --arg workflow "$GITHUB_WORKFLOW" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_url "$RUN_URL" \
-            '$agents | map({
-              type: "image",
-              name: ("MCP Agent: " + .),
-              status: "building",
-              workflow: $workflow,
-              run_id: $run_id,
-              run_url: $run_url
-            })' > prebuild-artifacts.json
-
-          jq -n \
-            --slurpfile artifacts prebuild-artifacts.json \
             --argjson pr_number "${{ github.event.pull_request.number }}" \
             --arg head_sha "${{ github.event.pull_request.head.sha }}" \
             --arg head_ref "${{ github.event.pull_request.head.ref }}" \
             --arg prebuild_tag "$PREBUILD_TAG" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
             '{
               event_type: "prebuild-published",
               client_payload: {
@@ -150,11 +137,16 @@ jobs:
                 prebuild_tag: $prebuild_tag,
                 workflow: $workflow,
                 run_id: $run_id,
-                artifacts: $artifacts[0]
+                artifacts: ($agents | map({
+                  type: "image",
+                  name: ("MCP Agent: " + .),
+                  status: "building",
+                  workflow: $workflow,
+                  run_id: $run_id,
+                  run_url: $run_url
+                }))
               }
-            }' > prebuild-started.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-started.json || true
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input - || true
 
   build-and-push:
     runs-on: ubuntu-latest
@@ -164,7 +156,7 @@ jobs:
       startsWith(github.head_ref, 'prebuild/') &&
       github.event.action != 'closed'
     permissions:
-      contents: read
+      contents: write  # Required for repository_dispatch
       packages: write
       pull-requests: write
 
@@ -244,78 +236,25 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-      - name: Write prebuild artifact metadata
-        if: github.event_name == 'pull_request'
-        shell: bash
-        env:
-          ARTIFACT_NAME: "MCP Agent: ${{ matrix.agent }}"
-          ARTIFACT_FILE: mcp-${{ matrix.agent }}.json
-        run: |
-          mkdir -p prebuild-artifacts
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
-          jq -n \
-            --arg type "image" \
-            --arg name "$ARTIFACT_NAME" \
-            --arg repository "$REGISTRY/$IMAGE_NAME" \
-            --arg tag "$PREBUILD_TAG" \
-            --arg ref "$REGISTRY/$IMAGE_NAME:$PREBUILD_TAG" \
-            --arg status "published" \
-            --arg workflow "$GITHUB_WORKFLOW" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_url "$RUN_URL" \
-            '{type: $type, name: $name, repository: $repository, tag: $tag, ref: $ref, status: $status, workflow: $workflow, run_id: $run_id, run_url: $run_url}' \
-            > "prebuild-artifacts/$ARTIFACT_FILE"
-
-      - name: Upload prebuild artifact metadata
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
-        with:
-          name: prebuild-artifact-mcp-${{ matrix.agent }}
-          path: prebuild-artifacts/mcp-${{ matrix.agent }}.json
-          retention-days: 1
-
-  notify-prebuild-comment:
-    runs-on: ubuntu-latest
-    needs: [determine-agents, build-and-push]
-    if: |
-      needs.determine-agents.outputs.should_build == 'true' &&
-      needs.build-and-push.result == 'success' &&
-      startsWith(github.head_ref, 'prebuild/') &&
-      github.event.action != 'closed'
-    permissions:
-      actions: read
-      contents: write  # Required for repository_dispatch
-    steps:
-      - name: Download prebuild artifact metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
-        with:
-          path: prebuild-artifacts
-
-      - name: Merge prebuild artifact metadata
-        shell: bash
-        run: |
-          mapfile -t files < <(find prebuild-artifacts -name '*.json' -type f | sort)
-          if [[ "${#files[@]}" -eq 0 ]]; then
-            echo "No prebuild artifact metadata found"
-            exit 1
-          fi
-
-          jq -s '.' "${files[@]}" > prebuild-artifacts.json
-
       - name: Notify prebuild artifact comment
+        if: github.event_name == 'pull_request'
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ARTIFACT_NAME: "MCP Agent: ${{ matrix.agent }}"
         run: |
-          PREBUILD_TAG=$(jq -r 'map(select(.tag != "")) | .[0].tag // ""' prebuild-artifacts.json)
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
           jq -n \
-            --slurpfile artifacts prebuild-artifacts.json \
             --argjson pr_number "${{ github.event.pull_request.number }}" \
             --arg head_sha "${{ github.event.pull_request.head.sha }}" \
             --arg head_ref "${{ github.event.pull_request.head.ref }}" \
             --arg prebuild_tag "$PREBUILD_TAG" \
             --arg workflow "$GITHUB_WORKFLOW" \
             --arg run_id "$GITHUB_RUN_ID" \
+            --arg run_url "$RUN_URL" \
+            --arg name "$ARTIFACT_NAME" \
+            --arg repository "$REGISTRY/$IMAGE_NAME" \
+            --arg ref "$REGISTRY/$IMAGE_NAME:$PREBUILD_TAG" \
             '{
               event_type: "prebuild-published",
               client_payload: {
@@ -325,11 +264,19 @@ jobs:
                 prebuild_tag: $prebuild_tag,
                 workflow: $workflow,
                 run_id: $run_id,
-                artifacts: $artifacts[0]
+                artifacts: [{
+                  type: "image",
+                  name: $name,
+                  repository: $repository,
+                  tag: $prebuild_tag,
+                  ref: $ref,
+                  status: "published",
+                  workflow: $workflow,
+                  run_id: $run_id,
+                  run_url: $run_url
+                }]
               }
-            }' > prebuild-published.json
-
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-published.json
+            }' | gh api --method POST /repos/${{ github.repository }}/dispatches --input -
 
   load-config-cleanup:
     runs-on: ubuntu-latest
