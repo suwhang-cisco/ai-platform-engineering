@@ -5,10 +5,6 @@ on:
   repository_dispatch:
     types: [prebuild-published]
 
-concurrency:
-  group: prebuild-comment-${{ github.event.client_payload.pr_number }}
-  cancel-in-progress: false
-
 permissions:
   actions: read
   issues: write
@@ -274,16 +270,17 @@ jobs:
                 return [];
               }
 
-              const chartNames = [...new Set(
+              const chartsByName = new Map(
                 artifacts
                   .filter((artifact) => artifact.type === "helm-chart")
-                  .map((artifact) => artifact.name.toLowerCase())
-              )];
+                  .map((artifact) => [artifact.name.toLowerCase(), artifact])
+              );
               const discovered = [];
 
-              for (const chartName of chartNames) {
-                const definition = chartDefinitions.get(chartName);
-                if (!definition) {
+              for (const definition of chartDefinitions.values()) {
+                const existing = chartsByName.get(definition.name.toLowerCase());
+                if (existing?.status === "failed") {
+                  core.info(`Keeping explicit failed status for Helm chart ${definition.name}; skipping GHCR discovery override`);
                   continue;
                 }
 
@@ -311,7 +308,7 @@ jobs:
                   status: "published",
                   workflow: "",
                   runId: "",
-                  runUrl: "",
+                  runUrl: existing?.runUrl || "",
                 });
               }
 
@@ -526,62 +523,113 @@ jobs:
             ]);
             const isCurrentHead = pull.head.sha === headSha;
 
-            const comments = await github.paginate(github.rest.issues.listComments, {
+            const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+            const listComments = () => github.paginate(github.rest.issues.listComments, {
               owner: context.repo.owner,
               repo: context.repo.repo,
               issue_number: prNumber,
               per_page: 100,
             });
-
-            const existingComment = comments.find((comment) =>
-              comment.user?.type === "Bot" && (comment.body || "").includes(marker)
-            );
-
-            const artifactsByKey = new Map();
-            for (const artifact of parseExistingArtifacts(existingComment?.body || "")) {
-              artifactsByKey.set(keyFor(artifact), artifact);
-            }
-            for (const artifact of payloadArtifacts) {
-              const key = keyFor(artifact);
-              artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
-            }
-            for (const artifact of await discoverPublishedCharts([...artifactsByKey.values()])) {
-              const key = keyFor(artifact);
-              artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
-            }
-            for (const artifact of await resolveCompletedBuildStatuses([...artifactsByKey.values()])) {
-              const key = keyFor(artifact);
-              artifactsByKey.set(key, artifact);
-            }
-
-            const artifacts = [...artifactsByKey.values()]
-              .filter((artifact) =>
-                artifact.status === "building"
-                || artifact.status === "failed"
-                || (artifact.type === "image" && (artifact.tag || artifact.ref))
-                || (artifact.type === "helm-chart" && artifact.version)
+            const artifactCommentsForHead = (comments) => comments
+              .filter((comment) =>
+                comment.user?.type === "Bot" && (comment.body || "").includes(marker)
               )
-              .sort((a, b) => Number(a.type === "helm-chart") - Number(b.type === "helm-chart") || a.name.localeCompare(b.name));
+              .sort((a, b) => a.id - b.id);
+            const buildArtifacts = async (comments) => {
+              const artifactsByKey = new Map();
+              for (const comment of artifactCommentsForHead(comments)) {
+                for (const artifact of parseExistingArtifacts(comment.body || "")) {
+                  const key = keyFor(artifact);
+                  artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
+                }
+              }
+              for (const artifact of payloadArtifacts) {
+                const key = keyFor(artifact);
+                artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
+              }
+              for (const artifact of await discoverPublishedCharts([...artifactsByKey.values()])) {
+                const key = keyFor(artifact);
+                artifactsByKey.set(key, mergeArtifact(artifactsByKey.get(key), artifact));
+              }
+              for (const artifact of await resolveCompletedBuildStatuses([...artifactsByKey.values()])) {
+                const key = keyFor(artifact);
+                artifactsByKey.set(key, artifact);
+              }
 
-            const body = renderComment(artifacts, !isCurrentHead);
+              return [...artifactsByKey.values()]
+                .filter((artifact) =>
+                  artifact.status === "building"
+                  || artifact.status === "failed"
+                  || (artifact.type === "image" && (artifact.tag || artifact.ref))
+                  || (artifact.type === "helm-chart" && artifact.version)
+                )
+                .sort((a, b) => Number(a.type === "helm-chart") - Number(b.type === "helm-chart") || a.name.localeCompare(b.name));
+            };
+            const deleteDuplicateComment = async (comment) => {
+              try {
+                await github.rest.issues.deleteComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: comment.id,
+                });
+                core.info(`Deleted duplicate prebuild artifact comment ${comment.id}`);
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                core.info(`Duplicate prebuild artifact comment ${comment.id} was already deleted`);
+              }
+            };
+            const upsertArtifactComment = async (comments, body) => {
+              const [targetComment, ...duplicateComments] = artifactCommentsForHead(comments);
 
-            if (existingComment) {
-              await github.rest.issues.updateComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                comment_id: existingComment.id,
-                body,
-              });
-              core.info(`Updated prebuild artifact comment ${existingComment.id}`);
-            } else {
-              await github.rest.issues.createComment({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: prNumber,
-                body,
-              });
-              core.info("Created prebuild artifact comment");
+              if (!targetComment) {
+                const { data: comment } = await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: prNumber,
+                  body,
+                });
+                core.info(`Created prebuild artifact comment ${comment.id}`);
+                return comment;
+              }
+
+              try {
+                const { data: comment } = await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: targetComment.id,
+                  body,
+                });
+                core.info(`Updated prebuild artifact comment ${comment.id}`);
+
+                for (const duplicateComment of duplicateComments) {
+                  await deleteDuplicateComment(duplicateComment);
+                }
+
+                return comment;
+              } catch (error) {
+                if (error.status !== 404) {
+                  throw error;
+                }
+                core.info(`Prebuild artifact comment ${targetComment.id} was deleted by another run; retrying`);
+                return upsertArtifactComment(await listComments(), body);
+              }
+            };
+
+            let comments = await listComments();
+            for (let attempt = 1; attempt <= 3; attempt++) {
+              const artifacts = await buildArtifacts(comments);
+              const body = renderComment(artifacts, !isCurrentHead);
+              await upsertArtifactComment(comments, body);
+
+              if (attempt < 3) {
+                await sleep(2000);
+                comments = await listComments();
+              }
             }
+
+            comments = await listComments();
 
             if (!isCurrentHead) {
               return;
