@@ -26,7 +26,7 @@ on:
         default: ''
 
 permissions:
-  contents: write  # Required for repository_dispatch
+  contents: write
   issues: write
   packages: write
   pull-requests: write
@@ -38,8 +38,6 @@ jobs:
     runs-on: ubuntu-latest
     # Skip if a new commit was made (will re-run on next trigger)
     if: ${{ !inputs.new_commit }}
-    outputs:
-      skip: ${{ steps.version-check.outputs.skip }}
 
     steps:
       - name: 📋 Set PR info from inputs
@@ -225,20 +223,17 @@ jobs:
         if: steps.version-check.outputs.skip != 'true'
         id: version
         run: |
+          BASE_COMMIT="${{ steps.base.outputs.base_commit }}"
+
           # Get branch name and remove 'prebuild/' prefix if present
           BRANCH_NAME="${{ steps.pr-info.outputs.head_ref }}"
           CLEAN_BRANCH=$(echo "${BRANCH_NAME#prebuild/}" | tr '/' '-' | tr '_' '-' | tr '[:upper:]' '[:lower:]')
-          IMAGE_BRANCH="${BRANCH_NAME#prebuild/}"
-          IMAGE_BRANCH="${IMAGE_BRANCH//\//-}"
-          SHORT_SHA="${{ steps.pr-info.outputs.head_sha }}"
-          SHORT_SHA="${SHORT_SHA:0:7}"
 
-          CHART_SUFFIX="${CLEAN_BRANCH}-${SHORT_SHA}"
+          # Get commit count for this PR
+          COMMIT_COUNT=$(git rev-list --count "$BASE_COMMIT"..HEAD)
 
           echo "clean-branch=$CLEAN_BRANCH" >> $GITHUB_OUTPUT
-          echo "short-sha=$SHORT_SHA" >> $GITHUB_OUTPUT
-          echo "chart-suffix=$CHART_SUFFIX" >> $GITHUB_OUTPUT
-          echo "image-prebuild-tag=${IMAGE_BRANCH}-${SHORT_SHA}" >> $GITHUB_OUTPUT
+          echo "commit-count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
 
           make_prebuild_version() {
             local chart_file="$1"
@@ -250,7 +245,7 @@ jobs:
               exit 1
             fi
 
-            echo "${current_version}-${CHART_SUFFIX}"
+            echo "${current_version}-${CLEAN_BRANCH}-${COMMIT_COUNT}"
           }
 
           # Generate version for rag-stack if changed
@@ -266,6 +261,42 @@ jobs:
             echo "ai-platform-engineering version: $AI_PLATFORM_VERSION"
             echo "ai-platform-version=$AI_PLATFORM_VERSION" >> $GITHUB_OUTPUT
           fi
+
+      - name: Upload building rag-stack prebuild status
+        if: steps.version-check.outputs.skip != 'true' && steps.detect.outputs.rag-stack-changed == 'true'
+        uses: ./.github/actions/prebuild-status
+        with:
+          pr_number: ${{ steps.bump-status.outputs.pr_number }}
+          head_sha: ${{ steps.pr-info.outputs.head_sha }}
+          head_ref: ${{ steps.pr-info.outputs.head_ref }}
+          source: helm
+          type: helm
+          name: rag-stack
+          repository: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
+          tag: ${{ steps.version.outputs.rag-stack-version }}
+          ref: oci://ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts/rag-stack
+          version: ${{ steps.version.outputs.rag-stack-version }}
+          release_name: rag
+          status: building
+          artifact_suffix: start
+
+      - name: Upload building ai-platform-engineering prebuild status
+        if: steps.version-check.outputs.skip != 'true' && steps.detect.outputs.ai-platform-changed == 'true'
+        uses: ./.github/actions/prebuild-status
+        with:
+          pr_number: ${{ steps.bump-status.outputs.pr_number }}
+          head_sha: ${{ steps.pr-info.outputs.head_sha }}
+          head_ref: ${{ steps.pr-info.outputs.head_ref }}
+          source: helm
+          type: helm
+          name: ai-platform-engineering
+          repository: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
+          tag: ${{ steps.version.outputs.ai-platform-version }}
+          ref: oci://ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts/ai-platform-engineering
+          version: ${{ steps.version.outputs.ai-platform-version }}
+          release_name: ai-platform
+          status: building
+          artifact_suffix: start
 
       - name: 📦 Package rag-stack Chart
         if: steps.version-check.outputs.skip != 'true' && steps.detect.outputs.rag-stack-changed == 'true'
@@ -331,8 +362,8 @@ jobs:
           echo "✅ ai-platform-engineering packaged successfully with all dependencies"
 
       - name: 🚀 Push Prebuild Charts to GHCR
-        id: push_charts
         if: steps.version-check.outputs.skip != 'true'
+        id: push
         run: |
           REGISTRY="oci://ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts"
 
@@ -349,101 +380,38 @@ jobs:
             fi
           done
 
-      - name: Write prebuild artifact metadata
-        if: ${{ always() && steps.version-check.outputs.skip != 'true' && steps.detect.outcome == 'success' && steps.version.outcome == 'success' }}
-        shell: bash
-        env:
-          REGISTRY: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
-        run: |
-          mkdir -p prebuild-artifacts
-          STATUS="published"
-          if [[ "${{ steps.push_charts.outcome }}" != "success" ]]; then
-            STATUS="failed"
-          fi
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${GITHUB_RUN_ID}"
-
-          jq -n \
-            --argjson pr_number "${{ steps.bump-status.outputs.pr_number }}" \
-            --arg head_sha "${{ steps.pr-info.outputs.head_sha }}" \
-            --arg head_ref "${{ steps.pr-info.outputs.head_ref }}" \
-            --arg prebuild_tag "${{ steps.version.outputs.image-prebuild-tag }}" \
-            --arg chart_suffix "${{ steps.version.outputs.chart-suffix }}" \
-            --arg workflow "$GITHUB_WORKFLOW" \
-            --arg run_id "$GITHUB_RUN_ID" \
-            --arg run_url "$RUN_URL" \
-            --arg registry "$REGISTRY" \
-            --arg status "$STATUS" \
-            --arg rag_changed "${{ steps.detect.outputs.rag-stack-changed }}" \
-            --arg ai_changed "${{ steps.detect.outputs.ai-platform-changed }}" \
-            --arg rag_version "${{ steps.version.outputs.rag-stack-version }}" \
-            --arg ai_version "${{ steps.version.outputs.ai-platform-version }}" \
-            '{
-              event_type: "prebuild-published",
-              client_payload: {
-                pr_number: $pr_number,
-                head_sha: $head_sha,
-                head_ref: $head_ref,
-                prebuild_tag: $prebuild_tag,
-                chart_suffix: $chart_suffix,
-                workflow: $workflow,
-                run_id: $run_id,
-                run_url: $run_url,
-                artifacts: [
-                  if $rag_changed == "true" then {
-                    type: "helm-chart",
-                    name: "rag-stack",
-                    repository: ($registry + "/rag-stack"),
-                    version: $rag_version,
-                    releaseName: "rag",
-                    status: $status,
-                    workflow: $workflow,
-                    run_id: $run_id,
-                    run_url: $run_url
-                  } else empty end,
-                  if $ai_changed == "true" then {
-                    type: "helm-chart",
-                    name: "ai-platform-engineering",
-                    repository: ($registry + "/ai-platform-engineering"),
-                    version: $ai_version,
-                    releaseName: "ai-platform",
-                    status: $status,
-                    workflow: $workflow,
-                    run_id: $run_id,
-                    run_url: $run_url
-                  } else empty end
-                ]
-              }
-            }' > prebuild-artifacts/prebuild-published.json
-
-      - name: Upload prebuild artifact metadata
-        if: ${{ always() && steps.version-check.outputs.skip != 'true' && steps.detect.outcome == 'success' && steps.version.outcome == 'success' }}
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+      - name: Upload final rag-stack prebuild status
+        if: ${{ always() && steps.version-check.outputs.skip != 'true' && steps.detect.outputs.rag-stack-changed == 'true' }}
+        uses: ./.github/actions/prebuild-status
         with:
-          name: prebuild-artifact-helm
-          path: prebuild-artifacts/prebuild-published.json
-          retention-days: 1
+          pr_number: ${{ steps.bump-status.outputs.pr_number }}
+          head_sha: ${{ steps.pr-info.outputs.head_sha }}
+          head_ref: ${{ steps.pr-info.outputs.head_ref }}
+          source: helm
+          type: helm
+          name: rag-stack
+          repository: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
+          tag: ${{ steps.version.outputs.rag-stack-version }}
+          ref: oci://ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts/rag-stack
+          version: ${{ steps.version.outputs.rag-stack-version }}
+          release_name: rag
+          status: ${{ steps.push.outcome == 'success' && 'published' || 'failed' }}
+          artifact_suffix: final
 
-  notify-prebuild-comment:
-    runs-on: ubuntu-latest
-    needs: publish-prebuild
-    if: |
-      always() &&
-      !inputs.new_commit &&
-      needs.publish-prebuild.outputs.skip != 'true' &&
-      (needs.publish-prebuild.result == 'success' || needs.publish-prebuild.result == 'failure')
-    permissions:
-      actions: read
-      contents: write  # Required for repository_dispatch
-    steps:
-      - name: Download prebuild artifact metadata
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - name: Upload final ai-platform-engineering prebuild status
+        if: ${{ always() && steps.version-check.outputs.skip != 'true' && steps.detect.outputs.ai-platform-changed == 'true' }}
+        uses: ./.github/actions/prebuild-status
         with:
-          name: prebuild-artifact-helm
-          path: prebuild-artifacts
-
-      - name: Notify prebuild artifact comment
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          gh api --method POST /repos/${{ github.repository }}/dispatches --input prebuild-artifacts/prebuild-published.json
+          pr_number: ${{ steps.bump-status.outputs.pr_number }}
+          head_sha: ${{ steps.pr-info.outputs.head_sha }}
+          head_ref: ${{ steps.pr-info.outputs.head_ref }}
+          source: helm
+          type: helm
+          name: ai-platform-engineering
+          repository: ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts
+          tag: ${{ steps.version.outputs.ai-platform-version }}
+          ref: oci://ghcr.io/${{ github.repository_owner }}/prebuild-helm-charts/ai-platform-engineering
+          version: ${{ steps.version.outputs.ai-platform-version }}
+          release_name: ai-platform
+          status: ${{ steps.push.outcome == 'success' && 'published' || 'failed' }}
+          artifact_suffix: final
