@@ -6,7 +6,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import re
 import sys
+import time
 import urllib.error
 import urllib.request
 import zipfile
@@ -20,6 +22,19 @@ STATUS_LABELS = {
     "published": "Published",
     "failed": "Failed",
 }
+DOWNLOAD_ATTEMPTS = 5
+DOWNLOAD_RETRY_SECONDS = 2
+LOAD_ATTEMPTS = 3
+LOAD_RETRY_SECONDS = 2
+
+
+class ApiError(RuntimeError):
+    def __init__(self, method: str, url: str, status: int, details: str):
+        self.method = method
+        self.url = url
+        self.status = status
+        self.details = details
+        super().__init__(f"GitHub API {method} {url} failed: {status} {details}")
 
 
 def env(name: str) -> str:
@@ -34,6 +49,7 @@ TOKEN = env("GITHUB_TOKEN")
 PR_NUMBER = env("PR_NUMBER")
 HEAD_SHA = env("HEAD_SHA")
 MARKER = f"<!-- prebuild-artifacts pr={PR_NUMBER} sha={HEAD_SHA} -->"
+MARKER_PREFIX = f"<!-- prebuild-artifacts pr={PR_NUMBER} sha="
 
 
 def api(
@@ -59,7 +75,9 @@ def api(
             body = response.read()
     except urllib.error.HTTPError as error:
         details = error.read().decode("utf-8", errors="replace")
-        raise SystemExit(f"GitHub API {method} {url} failed: {error.code} {details}")
+        raise ApiError(method, url, error.code, details) from error
+    except urllib.error.URLError as error:
+        raise ApiError(method, url, 0, str(error.reason)) from error
 
     if binary:
         return body
@@ -113,51 +131,80 @@ def newest_matching_artifacts() -> list[dict[str, Any]]:
 
 def download_status(artifact: dict[str, Any]) -> dict[str, Any] | None:
     artifact_id = artifact["id"]
-    archive = api("GET", f"/repos/{REPO}/actions/artifacts/{artifact_id}/zip", binary=True)
+    name = artifact.get("name")
 
-    with zipfile.ZipFile(io.BytesIO(archive)) as zip_file:
-        status_names = [name for name in zip_file.namelist() if name.endswith("status.json")]
-        if not status_names:
-            print(f"Skipping artifact {artifact.get('name')}: no status.json", file=sys.stderr)
-            return None
+    for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
+        try:
+            archive = api(
+                "GET",
+                f"/repos/{REPO}/actions/artifacts/{artifact_id}/zip",
+                binary=True,
+            )
 
-        with zip_file.open(status_names[0]) as status_file:
-            status = json.load(status_file)
+            with zipfile.ZipFile(io.BytesIO(archive)) as zip_file:
+                status_names = [path for path in zip_file.namelist() if path.endswith("status.json")]
+                if not status_names:
+                    print(f"Skipping artifact {name}: no status.json", file=sys.stderr)
+                    return None
+
+                with zip_file.open(status_names[0]) as status_file:
+                    status = json.load(status_file)
+            break
+        except (ApiError, json.JSONDecodeError, zipfile.BadZipFile) as error:
+            if attempt == DOWNLOAD_ATTEMPTS:
+                print(f"Skipping artifact {name}: could not read status.json: {error}", file=sys.stderr)
+                return None
+            print(
+                f"Artifact {name} was not readable yet; retrying in {DOWNLOAD_RETRY_SECONDS}s",
+                file=sys.stderr,
+            )
+            time.sleep(DOWNLOAD_RETRY_SECONDS)
 
     if str(status.get("pr_number")) != str(PR_NUMBER) or status.get("head_sha") != HEAD_SHA:
-        print(f"Skipping artifact {artifact.get('name')}: PR/SHA mismatch", file=sys.stderr)
+        print(f"Skipping artifact {name}: PR/SHA mismatch", file=sys.stderr)
         return None
 
-    status["_artifact_name"] = artifact.get("name", "")
+    status["_artifact_name"] = name or ""
     status["_artifact_created_at"] = artifact.get("created_at", "")
     return status
 
 
-def load_rows() -> list[dict[str, Any]]:
+def load_rows() -> tuple[list[dict[str, Any]], int, int]:
     rows_by_key: dict[tuple[str, str], dict[str, Any]] = {}
+    artifacts = newest_matching_artifacts()
+    skipped = 0
 
-    for artifact in newest_matching_artifacts():
+    for artifact in artifacts:
         status = download_status(artifact)
         if not status:
+            skipped += 1
             continue
 
-        row_type = status.get("type", "")
-        name = status.get("name", "")
+        row_type = normalize_type(status.get("type"))
+        name = clean(status.get("name"))
         if not row_type or not name:
             print(f"Skipping artifact {artifact.get('name')}: missing type or name", file=sys.stderr)
+            skipped += 1
             continue
 
+        status["type"] = row_type
+        status["name"] = name
+        status["status"] = normalize_status(status.get("status"))
         status["_sort_time"] = parse_time(
             status.get("created_at") or status.get("_artifact_created_at")
         )
-        key = (row_type, name)
+        key = (row_type, name.lower())
         current = rows_by_key.get(key)
         if current is None or status["_sort_time"] >= current["_sort_time"]:
             rows_by_key[key] = status
 
-    return sorted(
-        rows_by_key.values(),
-        key=lambda row: (row.get("type", ""), row.get("name", "")),
+    return (
+        sorted(
+            rows_by_key.values(),
+            key=lambda row: (0 if row.get("type") == "docker" else 1, row.get("name", "")),
+        ),
+        skipped,
+        len(artifacts),
     )
 
 
@@ -167,106 +214,161 @@ def clean(value: Any) -> str:
 
 def code(value: Any) -> str:
     text = clean(value)
-    return f"`{text}`" if text else ""
+    return f"`{text}`" if text else "-"
+
+
+def table_row(cells: list[str]) -> str:
+    return f"| {' | '.join(cells)} |"
 
 
 def ci_link(row: dict[str, Any]) -> str:
     run_url = clean(row.get("run_url"))
-    if not run_url:
-        return ""
-    workflow = clean(row.get("workflow")) or "workflow"
-    run_id = clean(row.get("run_id"))
-    label = f"{workflow} #{run_id}" if run_id else workflow
-    return f"[{label}]({run_url})"
+    return f"[CI]({run_url})" if run_url else "-"
+
+
+def normalize_type(value: Any) -> str:
+    artifact_type = clean(value).lower()
+    if artifact_type in {"docker", "image"}:
+        return "docker"
+    if artifact_type in {"helm", "helm-chart"}:
+        return "helm"
+    return artifact_type
+
+
+def normalize_status(value: Any) -> str:
+    status = clean(value).lower()
+    if status in {"building", "in_progress", "pending", "queued"}:
+        return "building"
+    if status in {"failed", "failure", "cancelled", "canceled", "timed_out"}:
+        return "failed"
+    return "published"
 
 
 def status_label(row: dict[str, Any]) -> str:
-    return STATUS_LABELS.get(clean(row.get("status")), clean(row.get("status")) or "Unknown")
+    return STATUS_LABELS.get(row.get("status", ""), "Unknown")
+
+
+def release_name_for(row: dict[str, Any]) -> str:
+    release_name = clean(row.get("releaseName") or row.get("release_name"))
+    if release_name:
+        return release_name
+    if row.get("name") == "rag-stack":
+        return "rag"
+    if row.get("name") == "ai-platform-engineering":
+        return "ai-platform"
+    return clean(row.get("name"))
 
 
 def render_comment(rows: list[dict[str, Any]]) -> str:
     docker_rows = [row for row in rows if row.get("type") == "docker"]
     helm_rows = [row for row in rows if row.get("type") == "helm"]
+    short_sha = HEAD_SHA[:7]
+    head_ref = next((clean(row.get("head_ref")) for row in rows if row.get("head_ref")), "")
 
     lines = [
         MARKER,
-        "",
-        "## Prebuild Artifacts",
-        "",
-        f"Status artifacts for PR #{PR_NUMBER} at `{HEAD_SHA}`.",
+        f"## Prebuild Artifacts for `{short_sha}`",
         "",
     ]
-
-    if not rows:
-        lines.extend(
-            [
-                "No matching prebuild status artifacts were found yet.",
-                "",
-                "The next status dispatch will rebuild this comment from artifacts.",
-            ]
-        )
-        return "\n".join(lines).rstrip() + "\n"
+    if head_ref:
+        lines.extend([f"**Branch:** `{head_ref}`", f"**Commit:** `{short_sha}`", ""])
+    else:
+        lines.extend([f"**Commit:** `{short_sha}`", ""])
 
     if docker_rows:
         lines.extend(
             [
-                "### Docker",
+                "### Docker Images",
                 "",
-                "| Image | Status | Tag | CI | Pull |",
+                "| Artifact | Image | Tag | Status | CI |",
                 "| --- | --- | --- | --- | --- |",
             ]
         )
         for row in docker_rows:
-            pull = ""
-            if row.get("status") == "published" and row.get("ref"):
-                pull = code(f"docker pull {row['ref']}")
             lines.append(
-                " | ".join(
+                table_row(
                     [
-                        "",
-                        code(row.get("repository") or row.get("ref") or row.get("name")),
-                        status_label(row),
+                        clean(row.get("name")),
+                        code(row.get("repository")),
                         code(row.get("tag")),
+                        status_label(row),
                         ci_link(row),
-                        pull,
-                        "",
                     ]
                 )
             )
         lines.append("")
+
+        pullable = [
+            row for row in docker_rows if row.get("status") == "published" and row.get("ref")
+        ]
+        if pullable:
+            lines.extend(
+                [
+                    "<details>",
+                    "<summary>Docker pull commands</summary>",
+                    "",
+                    "```bash",
+                    *[f"docker pull {clean(row.get('ref'))}" for row in pullable],
+                    "```",
+                    "",
+                    "</details>",
+                    "",
+                ]
+            )
 
     if helm_rows:
         lines.extend(
             [
-                "### Helm",
+                "### Helm Charts",
                 "",
-                "| Chart | Status | Version | CI | Install |",
+                "| Chart | Registry | Version | Status | CI |",
                 "| --- | --- | --- | --- | --- |",
             ]
         )
         for row in helm_rows:
-            install = ""
-            if row.get("status") == "published" and row.get("ref") and row.get("version"):
-                release_name = row.get("releaseName") or row.get("name")
-                install = code(
-                    f"helm upgrade --install {release_name} {row['ref']} --version {row['version']}"
-                )
             lines.append(
-                " | ".join(
+                table_row(
                     [
-                        "",
-                        code(row.get("name")),
-                        status_label(row),
+                        clean(row.get("name")),
+                        code(row.get("repository")),
                         code(row.get("version")),
+                        status_label(row),
                         ci_link(row),
-                        install,
-                        "",
                     ]
                 )
             )
         lines.append("")
 
-    lines.append("Failed rows remain visible until a newer status artifact replaces them.")
+        installable = [
+            row
+            for row in helm_rows
+            if row.get("status") == "published" and row.get("ref") and row.get("version")
+        ]
+        if installable:
+            lines.extend(
+                [
+                    "<details>",
+                    "<summary>Helm install commands</summary>",
+                    "",
+                    "```bash",
+                    *[
+                        (
+                            f"helm upgrade --install {release_name_for(row)} "
+                            f"{clean(row.get('ref'))} --version {clean(row.get('version'))}"
+                        )
+                        for row in installable
+                    ],
+                    "```",
+                    "",
+                    "</details>",
+                    "",
+                ]
+            )
+
+    if not docker_rows and not helm_rows:
+        lines.extend(["No prebuild artifacts have been reported yet.", ""])
+
+    lines.append("> These prebuild artifacts will be automatically cleaned up when the PR is closed or merged.")
     return "\n".join(lines).rstrip() + "\n"
 
 
@@ -284,29 +386,43 @@ def list_issue_comments() -> list[dict[str, Any]]:
         page += 1
 
 
-def reconcile_comment(body: str) -> None:
+def artifact_comments_for_head(comments: list[dict[str, Any]]) -> list[dict[str, Any]]:
     managed = [
         comment
-        for comment in list_issue_comments()
-        if MARKER in (comment.get("body") or "")
+        for comment in comments
+        if comment.get("user", {}).get("type") == "Bot" and MARKER in (comment.get("body") or "")
     ]
-    managed.sort(key=lambda comment: parse_time(comment.get("created_at")), reverse=True)
+    return sorted(managed, key=lambda comment: comment.get("id", 0))
+
+
+def reconcile_comment(body: str) -> None:
+    managed = artifact_comments_for_head(list_issue_comments())
 
     if managed:
         target = managed[0]
-        if target.get("body") != body:
-            api(
-                "PATCH",
-                f"/repos/{REPO}/issues/comments/{target['id']}",
-                {"body": body},
-            )
-            print(f"Updated managed prebuild comment {target['id']}.")
-        else:
-            print(f"Managed prebuild comment {target['id']} is already current.")
+        try:
+            if target.get("body") != body:
+                api(
+                    "PATCH",
+                    f"/repos/{REPO}/issues/comments/{target['id']}",
+                    {"body": body},
+                )
+                print(f"Updated managed prebuild comment {target['id']}.")
+            else:
+                print(f"Managed prebuild comment {target['id']} is already current.")
+        except ApiError as error:
+            if error.status != 404:
+                raise
+            print(f"Managed prebuild comment {target['id']} disappeared; retrying.")
+            return reconcile_comment(body)
 
         for duplicate in managed[1:]:
-            api("DELETE", f"/repos/{REPO}/issues/comments/{duplicate['id']}")
-            print(f"Deleted duplicate managed prebuild comment {duplicate['id']}.")
+            try:
+                api("DELETE", f"/repos/{REPO}/issues/comments/{duplicate['id']}")
+                print(f"Deleted duplicate managed prebuild comment {duplicate['id']}.")
+            except ApiError as error:
+                if error.status != 404:
+                    raise
         return
 
     created = api(
@@ -317,10 +433,85 @@ def reconcile_comment(body: str) -> None:
     print(f"Created managed prebuild comment {created['id']}.")
 
 
+def current_pr_head_sha() -> str:
+    pull = api("GET", f"/repos/{REPO}/pulls/{PR_NUMBER}")
+    return str(pull.get("head", {}).get("sha", ""))
+
+
+def archived_body(body: str) -> str | None:
+    if "(archived)</summary>" in body:
+        return None
+
+    old_marker = re.search(r"<!-- prebuild-artifacts pr=\d+ sha=([^ ]+) -->", body)
+    if not old_marker:
+        return None
+
+    old_short_sha = old_marker.group(1)[:7] or "previous"
+    return "\n".join(
+        [
+            old_marker.group(0),
+            "<details>",
+            f"<summary>Prebuild Artifacts for `{old_short_sha}` (archived)</summary>",
+            "",
+            body.replace(old_marker.group(0), "", 1).strip(),
+            "",
+            "</details>",
+        ]
+    )
+
+
+def archive_older_comments() -> None:
+    for comment in list_issue_comments():
+        body = comment.get("body") or ""
+        if comment.get("user", {}).get("type") != "Bot":
+            continue
+        if MARKER_PREFIX not in body or MARKER in body:
+            continue
+
+        body = archived_body(body)
+        if not body:
+            continue
+
+        api(
+            "PATCH",
+            f"/repos/{REPO}/issues/comments/{comment['id']}",
+            {"body": body},
+        )
+        print(f"Archived older prebuild artifact comment {comment['id']}.")
+
+
+def load_rows_with_retries() -> tuple[list[dict[str, Any]], int, int]:
+    result: tuple[list[dict[str, Any]], int, int] = ([], 0, 0)
+    for attempt in range(1, LOAD_ATTEMPTS + 1):
+        result = load_rows()
+        _, skipped, matching = result
+        if not matching or not skipped:
+            return result
+        if attempt < LOAD_ATTEMPTS:
+            print(
+                f"{skipped} matching artifact(s) were not readable yet; retrying in {LOAD_RETRY_SECONDS}s",
+                file=sys.stderr,
+            )
+            time.sleep(LOAD_RETRY_SECONDS)
+    return result
+
+
 def main() -> None:
-    rows = load_rows()
-    print(f"Reconciling {len(rows)} prebuild artifact row(s).")
-    reconcile_comment(render_comment(rows))
+    try:
+        rows, skipped, matching = load_rows_with_retries()
+        print(f"Reconciling {len(rows)} prebuild artifact row(s).")
+        if matching and skipped == matching and not rows:
+            print("No readable matching artifacts yet; leaving the PR comment unchanged.")
+            return
+
+        reconcile_comment(render_comment(rows))
+
+        if current_pr_head_sha() == HEAD_SHA:
+            archive_older_comments()
+        else:
+            print("PR head moved since this dispatch; leaving older comments unchanged.")
+    except ApiError as error:
+        raise SystemExit(str(error)) from error
 
 
 if __name__ == "__main__":
