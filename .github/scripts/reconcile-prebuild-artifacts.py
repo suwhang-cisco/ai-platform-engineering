@@ -26,6 +26,7 @@ DOWNLOAD_ATTEMPTS = 5
 DOWNLOAD_RETRY_SECONDS = 2
 LOAD_ATTEMPTS = 3
 LOAD_RETRY_SECONDS = 2
+USER_AGENT = "prebuild-artifact-comment-reconciler"
 
 
 class ApiError(RuntimeError):
@@ -35,6 +36,19 @@ class ApiError(RuntimeError):
         self.status = status
         self.details = details
         super().__init__(f"GitHub API {method} {url} failed: {status} {details}")
+
+
+class NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: Any,
+        code: int,
+        msg: str,
+        headers: Any,
+        newurl: str,
+    ) -> urllib.request.Request | None:
+        return None
 
 
 def env(name: str) -> str:
@@ -64,7 +78,7 @@ def api(
         "Accept": "application/vnd.github+json",
         "Authorization": f"Bearer {TOKEN}",
         "X-GitHub-Api-Version": "2022-11-28",
-        "User-Agent": "prebuild-artifact-comment-reconciler",
+        "User-Agent": USER_AGENT,
     }
     if payload is not None:
         headers["Content-Type"] = "application/json"
@@ -84,6 +98,49 @@ def api(
     if not body:
         return None
     return json.loads(body.decode("utf-8"))
+
+
+def download_artifact_archive(artifact_id: Any) -> bytes:
+    url = f"{API_ROOT}/repos/{REPO}/actions/artifacts/{artifact_id}/zip"
+    request = urllib.request.Request(
+        url,
+        headers={
+            "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {TOKEN}",
+            "X-GitHub-Api-Version": "2022-11-28",
+            "User-Agent": USER_AGENT,
+        },
+        method="GET",
+    )
+    opener = urllib.request.build_opener(NoRedirectHandler)
+
+    try:
+        with opener.open(request) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        if error.code not in {301, 302, 303, 307, 308}:
+            details = error.read().decode("utf-8", errors="replace")
+            raise ApiError("GET", url, error.code, details) from error
+
+        location = error.headers.get("Location")
+        if not location:
+            raise ApiError("GET", url, error.code, "Redirect did not include a Location header") from error
+    except urllib.error.URLError as error:
+        raise ApiError("GET", url, 0, str(error.reason)) from error
+
+    blob_request = urllib.request.Request(
+        location,
+        headers={"User-Agent": USER_AGENT},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(blob_request) as response:
+            return response.read()
+    except urllib.error.HTTPError as error:
+        details = error.read().decode("utf-8", errors="replace")
+        raise ApiError("GET", location, error.code, details) from error
+    except urllib.error.URLError as error:
+        raise ApiError("GET", location, 0, str(error.reason)) from error
 
 
 def parse_time(value: str | None) -> datetime:
@@ -135,11 +192,7 @@ def download_status(artifact: dict[str, Any]) -> dict[str, Any] | None:
 
     for attempt in range(1, DOWNLOAD_ATTEMPTS + 1):
         try:
-            archive = api(
-                "GET",
-                f"/repos/{REPO}/actions/artifacts/{artifact_id}/zip",
-                binary=True,
-            )
+            archive = download_artifact_archive(artifact_id)
 
             with zipfile.ZipFile(io.BytesIO(archive)) as zip_file:
                 status_names = [path for path in zip_file.namelist() if path.endswith("status.json")]
