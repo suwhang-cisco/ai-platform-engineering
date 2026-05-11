@@ -301,6 +301,24 @@ def status_label(row: dict[str, Any]) -> str:
     return STATUS_LABELS.get(row.get("status", ""), "Unknown")
 
 
+def artifact_value(row: dict[str, Any], value: Any) -> str:
+    if row.get("status") != "published":
+        return status_label(row)
+    return code(value)
+
+
+def published_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if row.get("status") == "published"]
+
+
+def command_rows(rows: list[dict[str, Any]], *fields: str) -> list[dict[str, Any]]:
+    return [
+        row
+        for row in published_rows(rows)
+        if all(clean(row.get(field)) for field in fields)
+    ]
+
+
 def release_name_for(row: dict[str, Any]) -> str:
     release_name = clean(row.get("releaseName") or row.get("release_name"))
     if release_name:
@@ -342,8 +360,8 @@ def render_comment(rows: list[dict[str, Any]]) -> str:
                 table_row(
                     [
                         clean(row.get("name")),
-                        code(row.get("repository")),
-                        code(row.get("tag")),
+                        artifact_value(row, row.get("repository")),
+                        artifact_value(row, row.get("tag")),
                         status_label(row),
                         ci_link(row),
                     ]
@@ -351,9 +369,7 @@ def render_comment(rows: list[dict[str, Any]]) -> str:
             )
         lines.append("")
 
-        pullable = [
-            row for row in docker_rows if row.get("status") == "published" and row.get("ref")
-        ]
+        pullable = command_rows(docker_rows, "ref")
         if pullable:
             lines.extend(
                 [
@@ -383,8 +399,8 @@ def render_comment(rows: list[dict[str, Any]]) -> str:
                 table_row(
                     [
                         clean(row.get("name")),
-                        code(row.get("repository")),
-                        code(row.get("version")),
+                        artifact_value(row, row.get("repository")),
+                        artifact_value(row, row.get("version")),
                         status_label(row),
                         ci_link(row),
                     ]
@@ -392,11 +408,7 @@ def render_comment(rows: list[dict[str, Any]]) -> str:
             )
         lines.append("")
 
-        installable = [
-            row
-            for row in helm_rows
-            if row.get("status") == "published" and row.get("ref") and row.get("version")
-        ]
+        installable = command_rows(helm_rows, "ref", "version")
         if installable:
             lines.extend(
                 [

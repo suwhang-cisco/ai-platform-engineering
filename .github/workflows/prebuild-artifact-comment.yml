@@ -12,7 +12,7 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: prebuild-artifact-comment-pr-${{ github.event.client_payload.pr_number }}-sha-${{ github.event.client_payload.head_sha }}
+  group: prebuild-artifact-comment-pr-${{ github.event.client_payload.pr_number }}-sha-${{ github.event.client_payload.head_sha }}-${{ github.event.client_payload.source }}-${{ github.event.client_payload.name }}-${{ github.event.client_payload.artifact_suffix }}
   cancel-in-progress: false
 
 jobs:
