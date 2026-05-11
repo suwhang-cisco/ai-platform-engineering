@@ -303,7 +303,7 @@ def status_label(row: dict[str, Any]) -> str:
 
 def artifact_value(row: dict[str, Any], value: Any) -> str:
     if row.get("status") != "published":
-        return status_label(row)
+        return "-"
     return code(value)
 
 
