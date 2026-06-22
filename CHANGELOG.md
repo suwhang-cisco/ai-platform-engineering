@@ -1,14 +1,33 @@
+## 0.10.0 (2026-05-06)
+
+### Feat
+
+- **ci**: now this should work I think, maybe
+- **ci**: not sure what this is
+- **ci**: allow release through PR with no change
+- **ci**: do PR comment at the start of prebuild with placeholders
+- **sunny**: is sad and tired
+- **ci**: use commit hash not num for prebuild suffix
+
+### Fix
+
+- fix
+- **ci**: now?
+- **ci**: prebuild better for fials
+- **ci**: prebuild better
+- **ci**: codex sucks
+- **ci**: recomment PR update with latest at the bottom
+
+## 0.8.0-dev.1 (2026-04-29)
+
+### Fix
+
+- **ci**: PR write............
+- **ci**: prebuild PR comments to be one per commit
+
 ## 0.8.0 (2026-04-24)
 
-### Fix
-
-- **ci**: auto tag inf commits
-
 ## 0.8.0-rc.18 (2026-04-24)
-
-### Fix
-
-- **ci**: prevent inf loop for release PRs
 
 ## 0.8.0-rc.17 (2026-04-24)
 
@@ -21,7 +40,6 @@
 ### Fix
 
 - **ci**: auto tag infinite loop fix ATTEMPT TWO
-- **ci**: bad pipefails
 
 ## 0.8.0-rc.13 (2026-04-24)
 
@@ -30,10 +48,6 @@
 - **ci**: auto tag infinite loop fix ATTEMPT
 
 ## 0.8.0-rc.12 (2026-04-24)
-
-### Fix
-
-- **ci**: auto tag infinite loop fix
 
 ## 0.8.0-rc.11 (2026-04-24)
 
@@ -58,10 +72,6 @@
 - sunny is sad coz well
 - **sunny**: testing bad straight commit
 
-### Fix
-
-- **ci**: fix helm ci to trigger on tag
-
 ## 0.8.0-rc.2 (2026-04-24)
 
 ## 0.8.0-rc.1 (2026-04-24)
@@ -74,6 +84,12 @@
 
 ### Fix
 
+- **ci**: -hotfix blocked by PEP 440 so use +hotfix in pyproject.toml
+- **ci**: auto tag inf commits
+- **ci**: prevent inf loop for release PRs
+- **ci**: bad pipefails
+- **ci**: auto tag infinite loop fix
+- **ci**: fix helm ci to trigger on tag
 - **ci-prebuild**: use correct chart version
 - **ci**: bad syntax and fix prebuild cleanup
 - **ci**: fail ci if base not latest
@@ -82,7 +98,7 @@
 - **ci**: prevent infinite ci loop :)
 - **ci**: detect image changes, chart changes and irrelevant changes
 
-## 0.3.11-rc.1 (2026-04-21)
+## 0.3.11 (2026-04-21)
 
 ## 0.3.10 (2026-04-21)
 
