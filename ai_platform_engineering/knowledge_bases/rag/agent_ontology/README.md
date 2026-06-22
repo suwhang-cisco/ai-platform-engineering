@@ -1,5 +1,7 @@
 # Agent Ontology
 
+
+
 Automated schema discovery service that discovers and evaluates relationships between entity types in a knowledge graph using BM25 fuzzy search, deep property matching, and parallel LLM evaluation.
 
 For a conceptual overview, see the [Ontology Agent documentation](https://cnoe.io/docs/reference_implementation/integrations/ai/caipe/knowledge_bases/ontology-agent).
@@ -15,7 +17,7 @@ export NEO4J_URI="bolt://localhost:7687"
 export REDIS_URL="redis://localhost:6379"
 
 # Run the service
-source ./.venv/bin/activate 
+source ./.venv/bin/activate
 LOG_LEVEL=DEBUG python src/agent_ontology/restapi.py
 ```
 
